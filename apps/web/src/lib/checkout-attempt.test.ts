@@ -52,17 +52,16 @@ test('ignores malformed saved identifiers', () => {
   expect(loadAttemptIds('store')).toBeUndefined();
 });
 
-test('retains in-memory recovery if browser storage is unavailable', () => {
+test('skips reload recovery without throwing if browser storage is unavailable', () => {
   Object.defineProperty(globalThis, 'sessionStorage', {
     configurable: true,
     get: () => {
       throw new Error('Storage disabled');
     },
   });
-  saveAttemptIds('store', ids);
-  expect(loadAttemptIds('store')).toEqual(ids);
-  clearAttemptIds('store');
+  expect(() => saveAttemptIds('store', ids)).not.toThrow();
   expect(loadAttemptIds('store')).toBeUndefined();
+  expect(() => clearAttemptIds('store')).not.toThrow();
 });
 
 test('creates a new attempt while retaining the checkout ID for retry', () => {

@@ -42,7 +42,7 @@ Web: [http://localhost:8081](http://localhost:8081). API: [health](http://127.0.
 | Backend booking logic | [checkout service](apps/api/src/services/checkout.ts) | [HTTP checkout tests](apps/api/src/routes/checkout.test.ts) |
 | Supplied payment integration | [provider adapter](apps/api/src/payments.ts) | [provider tests](apps/api/src/payments.test.ts) |
 | Database persistence | [booking queries](apps/api/src/repositories/bookings.ts), [migrations](apps/api/migrations) | [restart/confirmation tests](apps/api/src/routes/checkout.test.ts), [migration tests](apps/api/src/database.test.ts) |
-| End-to-end behavior | [three browser checks](e2e/checkout.spec.ts) | Real frontend, HTTP API, adapter and SQLite; only the external provider is simulated |
+| End-to-end behavior | [browser checks](e2e/checkout.spec.ts) | Real frontend, HTTP API, adapter and SQLite; only the external provider is simulated |
 
 Read the [shared contracts](packages/contracts/src/index.ts) first, then [Checkout.tsx](apps/web/src/components/Checkout.tsx) for submission, accepted terms, result handling and reset decisions, and the [attempt policy](apps/web/src/lib/checkout-attempt.ts) for retry identities. For field behavior or lifecycle detail, [CheckoutForm.tsx](apps/web/src/components/CheckoutForm.tsx) owns validation and presentation, while adjacent [recovery mechanics](apps/web/src/components/checkout-recovery.ts) handle cancellable status polling. The form stays mounted through failures and pending requests to preserve inputs. The backend service keeps claim → provider → persist visible in one place.
 
@@ -68,6 +68,7 @@ npm run test:e2e
 - One USD bag item is supported. The solution chooses $5.90 and quantities 1–10 for this store; the server owns those values and validates them again before payment.
 - Integer cents avoid floating-point price calculations. A changed total or quantity limit updates the form and requires another deliberate Book action.
 - Local attempt IDs prevent replaying a payment. A timeout cannot establish whether the provider charged: unknown outcomes retain their IDs. The provider exposes no documented idempotency, lookup or refund operation, so this is not an exactly-once payment guarantee.
+- Reload starts fresh after success or an explicit decline. Browser recovery remembers unfinished submissions only; Retry on the current page still keeps the declined checkout and creates a fresh attempt.
 - “Start over” is a deliberate escape after an unknown result in this mock demo. It can create a second mock transaction. A production checkout would need reconciliation before offering another purchase after uncertainty.
 - Full card numbers remain in memory and transit to the provider; they are never logged or stored. Browser recovery stores only opaque IDs. Customer details and accepted prices are saved in SQLite.
 

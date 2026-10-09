@@ -48,7 +48,6 @@ export function selectAttempt(
 }
 
 const idsSchema = checkoutResponseSchema.pick({ checkoutId: true, attemptId: true });
-const memory = new Map<string, AttemptIds>();
 const key = (storeId: string) => `bounce:checkout:${storeId}`;
 
 export function createAttemptIds(checkoutId = randomUUID()): AttemptIds {
@@ -63,22 +62,20 @@ export function loadAttemptIds(storeId: string): AttemptIds | undefined {
       if (parsed.success) return parsed.data;
     }
   } catch {
-    // Storage may be unavailable on native or restricted browsers.
+    // Reload recovery is best effort when browser storage is unavailable.
   }
-  return memory.get(storeId);
+  return undefined;
 }
 
 export function saveAttemptIds(storeId: string, ids: AttemptIds) {
-  memory.set(storeId, ids);
   try {
     globalThis.sessionStorage?.setItem(key(storeId), JSON.stringify(ids));
   } catch {
-    // In-memory recovery remains available.
+    // The mounted checkout still keeps its own identity for same-page recovery.
   }
 }
 
 export function clearAttemptIds(storeId: string) {
-  memory.delete(storeId);
   try {
     globalThis.sessionStorage?.removeItem(key(storeId));
   } catch {

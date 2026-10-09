@@ -45,10 +45,17 @@ test('books through the HTTP API and persists accepted pricing and transaction m
   expect(checkout.provider.calls).toHaveLength(1);
 });
 
-test('keeps the booking after a decline and retries with a fresh payment attempt', async ({
+test('retries a decline in the same checkout even when browser storage is unavailable', async ({
   page,
   checkout,
 }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(window, 'sessionStorage', {
+      get() {
+        throw new Error('Storage unavailable for this test.');
+      },
+    });
+  });
   await enterDetails(page, '4111111111110002');
   await page.getByRole('button', { name: 'Book', exact: true }).click();
   await expect(page.getByText('Your booking has failed. Please try again.')).toBeVisible();
@@ -62,6 +69,36 @@ test('keeps the booking after a decline and retries with a fresh payment attempt
   expect(checkout.db.prepare('SELECT status FROM payment_attempts ORDER BY rowid').all()).toEqual([
     { status: 'declined' },
     { status: 'succeeded' },
+  ]);
+});
+
+test('starts a fresh form after reloading a declined booking without fetching its status', async ({
+  page,
+  checkout,
+}) => {
+  await enterDetails(page, '4111111111110002');
+  await page.getByRole('button', { name: 'Book', exact: true }).click();
+  await expect(page.getByText('Your booking has failed. Please try again.')).toBeVisible();
+  expect(
+    await page.evaluate(() => sessionStorage.getItem('bounce:checkout:codys-cookie-store')),
+  ).toBeNull();
+
+  const statusReads: string[] = [];
+  page.on('request', (request) => {
+    if (request.method() === 'GET' && new URL(request.url()).pathname.startsWith('/checkout/')) {
+      statusReads.push(request.url());
+    }
+  });
+  await page.reload();
+  await expect(page.getByRole('button', { name: 'Book', exact: true })).toBeVisible();
+  await expect(page.getByLabel('Name', { exact: true })).toHaveValue('');
+  await expect(page.getByLabel('Email', { exact: true })).toHaveValue('');
+  await expect(page.getByLabel('Card details', { exact: true })).toHaveValue('');
+  await expect(page.getByLabel('Number of bags: 1', { exact: true })).toBeVisible();
+  expect(statusReads).toEqual([]);
+  expect(checkout.provider.calls).toHaveLength(1);
+  expect(checkout.db.prepare('SELECT status FROM payment_attempts').all()).toEqual([
+    { status: 'declined' },
   ]);
 });
 

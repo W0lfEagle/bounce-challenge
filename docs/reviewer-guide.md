@@ -11,6 +11,8 @@ Start with `npm ci` and `npm run demo`, then open `http://localhost:8082`. The d
 5. Show the browser test assertions for persisted totals, attempt counts and no duplicate provider POST. Show a targeted Jest test for an unknown outcome or failed confirmation write.
 6. Explain the provider limitation: a timeout is not a decline, and local IDs cannot supply missing provider idempotency/lookup. The mock-only reset is a conscious demo compromise.
 
+Reload also starts fresh after an explicit decline; only unfinished submissions are remembered. Same-page Retry keeps the checkout identity with a fresh payment attempt.
+
 Before the interview, run `npm run check`, `npm run build`, `npm run format:check` and `npm run test:e2e`. Verify keyboard focus, Enter submission, error announcements and a narrow viewport manually. The assignment values usable flow, clear choices and defensible tradeoffs; native builds and extra styling are outside this submission's scope.
 
 ## Git bundle submission

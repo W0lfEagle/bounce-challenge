@@ -77,6 +77,7 @@ Returns the latest attempt's IDs and status, without customer/card details or a 
 | --- | --- | --- |
 | Double click or replay | Reuse the attempt IDs; an immediate request guard also prevents duplicate submission | Existing result/processing state is returned |
 | Explicit decline, same non-card details | Keep the checkout ID, generate a fresh attempt ID; card may be changed | New payment attempt |
+| Reload after an explicit decline | Empty form, with a new identity on the next Book; no previous-status lookup | Previous database records remain intact; no payment on reload |
 | Non-card details edited after decline | Generate a new checkout and attempt | New accepted booking snapshot |
 | Price or quantity terms changed before claim | Update the form, clear unused identity, require Book again | No payment until terms are accepted |
 | POST response lost or unverifiable | Look up the existing checkout with GET | No automatic payment retry |
@@ -87,7 +88,7 @@ Returns the latest attempt's IDs and status, without customer/card details or a 
 | Unknown provider outcome | Preserve IDs; offer explicit mock-only Start over | Old unresolved attempt remains protected |
 | Confirmed success | Show “Booking Placed!”, clear card and recovery IDs; next reload starts fresh | Confirmed database records remain intact |
 
-Browser tab session storage contains only UUID recovery IDs. Inputs stay in memory. Restricted-storage browsers and native clients fall back to memory; reload/restart recovery then has no durable guarantee. A recovered decline does not restore personal/card details: entering fresh details starts a new checkout because the original signature is unavailable.
+Browser tab session storage contains only UUID recovery IDs for unfinished submissions. Success and explicit decline clear those IDs; the mounted checkout retains its own identity for same-page Retry after a decline. Inputs stay in the mounted form. There is no global memory fallback: if browser storage is unavailable, reload recovery is unavailable, while same-page retry and recovery continue. Native restart recovery remains outside scope. If a saved unfinished payment is found to have declined, that result is shown once and its recovery IDs are cleared; original personal/card details are not restored.
 
 An initial lookup failure is passed to the coordinator, which distinguishes a missing record that can be replayed with unchanged details from an unknown outcome. Once a status GET has reported processing, transient failures keep polling within the existing deadline. Unmount cancels requests and waits.
 
@@ -107,7 +108,7 @@ SQLite uses `better-sqlite3`, foreign keys and WAL mode. Startup applies filenam
 
 Jest tests use real SQLite and Fastify request injection for database/HTTP policy, isolated fetch responses for provider parsing, and user-visible component assertions for form transitions. Parameterized validation cases cover boundaries. Browser tests use real storage, frontend networking, API routes, provider adapter and SQLite together; only the external provider is simulated.
 
-The browser scenarios cover Enter submission and confirmed persistence, decline then a new attempt, and reload during an in-flight payment with one provider call. They also verify clearing successful recovery IDs and removing the locked form inputs from keyboard focus. The simulator records amount/currency/last-four audit data in memory and stores no full card data. Each scenario has a temporary database and fresh browser context. Runtime entry points and visual styling do not need artificial tests merely to raise a coverage percentage.
+The browser scenarios cover Enter submission and confirmed persistence, same-page decline retry with storage unavailable, a fresh form after reloading a decline without a status read, and reload during an in-flight payment with one provider call. They also verify clearing resolved recovery IDs and removing the locked form inputs from keyboard focus. The simulator records amount/currency/last-four audit data in memory and stores no full card data. Each scenario has a temporary database and fresh browser context. Runtime entry points and visual styling do not need artificial tests merely to raise a coverage percentage.
 
 ## Dependency audit
 

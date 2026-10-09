@@ -51,12 +51,16 @@ export function Checkout({ store: initialStore }: { store: Store }) {
     (result: CheckoutResponse) => {
       const ids = { checkoutId: result.checkoutId, attemptId: result.attemptId };
       identity.current = { ...identity.current, ids };
-      if (result.status === 'succeeded') {
+      // Persist unfinished work only; a decline keeps its in-page identity for Retry.
+      if (result.status === 'processing' || result.status === 'unknown') {
+        saveAttemptIds(store.id, ids);
+      } else {
         clearAttemptIds(store.id);
+      }
+      if (result.status === 'succeeded') {
         identity.current = null;
         setState({ status: 'success' });
       } else {
-        saveAttemptIds(store.id, ids);
         setState({ status: result.status });
       }
     },

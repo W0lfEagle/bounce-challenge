@@ -321,6 +321,7 @@ test('shows a decline and Retry creates a new attempt for the same checkout', as
   await user.press(screen.getByRole('button', { name: 'Book' }));
   expect(await screen.findByText('Your booking has failed. Please try again.')).toBeTruthy();
   expect(screen.getByLabelText('Card details')).toHaveDisplayValue('4111 1111 1111 1111');
+  expect(clearAttemptIds).toHaveBeenCalledWith(store.id);
   await user.press(screen.getByRole('button', { name: 'Retry' }));
   expect(await screen.findByText('Booking Placed!')).toBeTruthy();
   expect(mockSubmitCheckout.mock.calls[1][0].checkoutId).toBe(ids.checkoutId);
@@ -457,7 +458,7 @@ test.each(['succeeded', 'declined', 'unknown'] as const)(
         expect(clearAttemptIds).toHaveBeenCalledWith(store.id);
       } else if (finalStatus === 'declined') {
         expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
-        expect(clearAttemptIds).not.toHaveBeenCalled();
+        expect(clearAttemptIds).toHaveBeenCalledWith(store.id);
       } else {
         expect(screen.getByRole('button', { name: 'Start over' })).toBeTruthy();
         expect(clearAttemptIds).not.toHaveBeenCalled();
