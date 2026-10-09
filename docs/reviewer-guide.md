@@ -21,11 +21,12 @@ The following example exports the current branch's history and verifies it:
 
 ```sh
 git status --short
-git bundle create ../bounce-challenge.bundle HEAD
+submission_branch=$(git branch --show-current)
+git bundle create ../bounce-challenge.bundle HEAD "$submission_branch"
 git bundle verify ../bounce-challenge.bundle
 ```
 
-Check that `git status` is clean for the intended files. If exporting a named branch instead, use its actual name rather than assuming `main`.
+Check that `git status` is clean for the intended files and that you are on the intended named branch. Include both `HEAD` and that branch: exporting only a named branch can leave a fresh clone unable to select its checkout automatically. Do not assume the solution branch is `main`.
 
 Test the delivered artifact from a fresh directory:
 
