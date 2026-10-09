@@ -7,7 +7,7 @@ Start with `npm ci` and `npm run demo`, then open `http://localhost:8082`. The d
 1. Show the store and total. Increase/decrease quantity and explain that the API owns the price and bounds, while the UI derives its display in cents.
 2. Enter `Reviewer Example`, `reviewer@example.com` and `4111 1111 1111 0002`. Book, show the explicit decline, change the card to `4111 1111 1111 1111`, and Retry. The booking is retained but the attempt is fresh.
 3. Reload the confirmed screen to start a fresh form. Use `4111 1111 1111 0003` and reload during the three-second delay. Status recovery waits for the existing payment and reaches confirmation.
-4. Open the checkout service. Explain the claim → provider → persist sequence, the short transactions, and the replay checks before repricing.
+4. Open `Checkout.tsx` for accepted terms, attempt selection and result handling. Explain how `CheckoutForm.tsx` retains fields through pending/failure states and hands normalized details to the coordinator. Then open the backend checkout service for claim → provider → persist, short transactions and replay checks before repricing.
 5. Show the browser test assertions for persisted totals, attempt counts and no duplicate provider POST. Show a targeted Jest test for an unknown outcome or failed confirmation write.
 6. Explain the provider limitation: a timeout is not a decline, and local IDs cannot supply missing provider idempotency/lookup. The mock-only reset is a conscious demo compromise.
 

@@ -4,7 +4,11 @@
 
 The frontend loads one store, renders its bag price and bounds, and derives the displayed total from quantity × unit price. Name, email and card inputs use shared validation. Name/email are trimmed; card numbers accept digits and ordinary spaces, normalize to 13–19 digits and format in groups of four on blur. Errors appear after leaving a field and then update while correcting it.
 
-`Checkout.tsx` owns the form and visible submission/recovery state. `lib/checkout-attempt.ts` selects identities and stores recovery IDs. `api/checkout.ts` verifies responses and distinguishes definite rejections from transport uncertainty. Adjacent styles keep presentation separate from the flow.
+`Checkout.tsx` is the coordinator: it owns store/quantity, accepted terms, attempt selection, submission, result/error handling and reset decisions. The interesting payment policy stays visible in this entry point.
+
+`CheckoutForm.tsx` owns name/email/card state, touched fields, validation, keyboard focus and the rendered form. Its six props are `store`, `quantity`, `onQuantityChange`, `state`, `onBook(details)` and `onStartOver`. Passing normalized details on Book avoids lifting every keystroke into the coordinator. The form remains mounted during pending requests and failures so inputs survive; confirmation unmounts it and releases those values.
+
+`lib/checkout-attempt.ts` selects identities and stores recovery IDs. Adjacent `components/checkout-recovery.ts` handles the polling interval, deadline and cancellation, reports processing and returns a terminal result; the coordinator applies that result or chooses the error state. `api/checkout.ts` verifies responses and distinguishes definite rejections from transport uncertainty. `CheckoutState` is exported by the coordinator and imported only as a type by the form, so sharing the view state introduces no runtime cycle. Adjacent styles keep presentation separate from the flow.
 
 The backend checkout service follows three steps:
 
@@ -85,7 +89,7 @@ Returns the latest attempt's IDs and status, without customer/card details or a 
 
 Browser tab session storage contains only UUID recovery IDs. Inputs stay in memory. Restricted-storage browsers and native clients fall back to memory; reload/restart recovery then has no durable guarantee. A recovered decline does not restore personal/card details: entering fresh details starts a new checkout because the original signature is unavailable.
 
-An initial failed status lookup has no confirmed processing state and becomes unknown. After processing has been observed, transient read failures do not expose Start over early: recovery keeps reading within its existing deadline. Unmount cancels requests and waits.
+An initial lookup failure is passed to the coordinator, which distinguishes a missing record that can be replayed with unchanged details from an unknown outcome. Once a status GET has reported processing, transient failures keep polling within the existing deadline. Unmount cancels requests and waits.
 
 ## Provider boundary and persistence
 

@@ -203,6 +203,51 @@ test('shows pending feedback, prevents repeated submissions, and displays succes
   expect(await screen.findByRole('header', { name: 'Booking Placed!' })).toBeTruthy();
 });
 
+test.each(['declined', 'rejected', 'unknown'] as const)(
+  'preserves every entered field through pending and %s feedback',
+  async (outcome) => {
+    let settleRequest!: () => void;
+    mockSubmitCheckout.mockReturnValueOnce(
+      new Promise<CheckoutResponse>((resolve, reject) => {
+        settleRequest = () => {
+          if (outcome === 'rejected') {
+            reject(new CheckoutRejectedError(400, 'INVALID_CHECKOUT', 'Invalid checkout details.'));
+          } else {
+            resolve({ ...ids, status: outcome });
+          }
+        };
+      }),
+    );
+    const user = userEvent.setup();
+    await render(<Checkout store={store} />);
+    await fillValidDetails();
+    await user.press(screen.getByRole('button', { name: 'Book' }));
+
+    expect(screen.getByLabelText('Placing Booking')).toBeTruthy();
+    expect(screen.getByLabelText('Name', { includeHiddenElements: true })).toHaveDisplayValue(
+      ' Test User ',
+    );
+    expect(screen.getByLabelText('Email', { includeHiddenElements: true })).toHaveDisplayValue(
+      ' test@example.com ',
+    );
+    expect(
+      screen.getByLabelText('Card details', { includeHiddenElements: true }),
+    ).toHaveDisplayValue('4111 1111 1111 1111');
+
+    await act(async () => {
+      settleRequest();
+    });
+    const buttonName =
+      outcome === 'declined' ? 'Retry' : outcome === 'unknown' ? 'Start over' : 'Book';
+    expect(await screen.findByRole('button', { name: buttonName })).toBeTruthy();
+    expect(screen.getByLabelText('Name')).toHaveDisplayValue(' Test User ');
+    expect(screen.getByLabelText('Email')).toHaveDisplayValue(' test@example.com ');
+    expect(screen.getByLabelText('Card details')).toHaveDisplayValue('4111 1111 1111 1111');
+    expect(mockSubmitCheckout).toHaveBeenCalledTimes(1);
+    expect(mockGetCheckoutStatus).not.toHaveBeenCalled();
+  },
+);
+
 test('replays the same unchanged checkout after a lost response and missing status record', async () => {
   mockSubmitCheckout.mockRejectedValueOnce(new Error('Offline')).mockResolvedValueOnce(success);
   mockGetCheckoutStatus.mockRejectedValueOnce(new CheckoutNotFoundError());
@@ -505,6 +550,45 @@ test.each([
     expect(mockSubmitCheckout.mock.calls[1][0].checkoutId).not.toBe(ids.checkoutId);
   },
 );
+
+test('keeps the corrected quantity and entered fields when store limits widen again', async () => {
+  const limitedStore: Store = {
+    ...store,
+    checkoutItems: [{ ...store.checkoutItems[0], maxQuantity: 6 }],
+  };
+  mockSubmitCheckout
+    .mockRejectedValueOnce(new QuantityChangedError(limitedStore))
+    .mockRejectedValueOnce(new QuantityChangedError(store))
+    .mockResolvedValueOnce(success);
+  const user = userEvent.setup();
+  await render(<Checkout store={store} />);
+  await fillValidDetails();
+  for (let count = 1; count < 10; count += 1) {
+    await user.press(screen.getByRole('button', { name: 'Increase number of bags' }));
+  }
+
+  await user.press(screen.getByRole('button', { name: 'Book' }));
+  expect(await screen.findByText('Choose 1–6 bags')).toBeTruthy();
+  expect(screen.getByLabelText('Number of bags: 6')).toBeTruthy();
+  expect(screen.getByLabelText('Name')).toHaveDisplayValue(' Test User ');
+  expect(screen.getByLabelText('Email')).toHaveDisplayValue(' test@example.com ');
+  expect(screen.getByLabelText('Card details')).toHaveDisplayValue('4111 1111 1111 1111');
+
+  await user.press(screen.getByRole('button', { name: 'Book' }));
+  expect(await screen.findByText('Choose 1–10 bags')).toBeTruthy();
+  expect(screen.getByLabelText('Number of bags: 6')).toBeTruthy();
+  expect(screen.getByLabelText('Name')).toHaveDisplayValue(' Test User ');
+  expect(screen.getByLabelText('Email')).toHaveDisplayValue(' test@example.com ');
+  expect(screen.getByLabelText('Card details')).toHaveDisplayValue('4111 1111 1111 1111');
+
+  await user.press(screen.getByRole('button', { name: 'Book' }));
+  expect(await screen.findByRole('header', { name: 'Booking Placed!' })).toBeTruthy();
+  expect(mockSubmitCheckout.mock.calls.map(([checkout]) => checkout.items[0].quantity)).toEqual([
+    10, 6, 6,
+  ]);
+  expect(mockSubmitCheckout.mock.calls[2][0].expectedTotalCents).toBe(3540);
+  expect(mockGetCheckoutStatus).not.toHaveBeenCalled();
+});
 
 test('shows a definite rejection without querying payment status and permits corrected details', async () => {
   mockSubmitCheckout.mockRejectedValueOnce(
