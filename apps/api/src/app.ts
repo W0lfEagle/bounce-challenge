@@ -13,7 +13,12 @@ type AppOptions = FastifyServerOptions & {
   pay?: ProcessPayment;
 };
 
-export function buildApp({ databasePath, webOrigin = 'http://localhost:8081', pay = processPayment, ...options }: AppOptions = {}) {
+export function buildApp({
+  databasePath,
+  webOrigin = 'http://localhost:8081',
+  pay = processPayment,
+  ...options
+}: AppOptions = {}) {
   const db = openDatabase(databasePath);
   const app = Fastify(options);
 
@@ -21,8 +26,10 @@ export function buildApp({ databasePath, webOrigin = 'http://localhost:8081', pa
   app.register(cors, { origin: webOrigin, methods: ['GET', 'POST'] });
 
   app.setErrorHandler((error, request, reply) => {
-    if (error instanceof Error && 'statusCode' in error && error.statusCode === 400) {
-      return reply.code(400).send({
+    const statusCode =
+      error instanceof Error && 'statusCode' in error ? error.statusCode : undefined;
+    if (typeof statusCode === 'number' && statusCode >= 400 && statusCode < 500) {
+      return reply.code(statusCode).send({
         error: { code: 'INVALID_REQUEST', message: 'Invalid request.' },
       } satisfies ApiError);
     }
@@ -32,9 +39,11 @@ export function buildApp({ databasePath, webOrigin = 'http://localhost:8081', pa
     } satisfies ApiError);
   });
 
-  app.setNotFoundHandler((_request, reply) => reply.code(404).send({
-    error: { code: 'NOT_FOUND', message: 'Resource not found.' },
-  } satisfies ApiError));
+  app.setNotFoundHandler((_request, reply) =>
+    reply.code(404).send({
+      error: { code: 'NOT_FOUND', message: 'Resource not found.' },
+    } satisfies ApiError),
+  );
 
   registerHealthRoutes(app);
   registerStoreRoutes(app, db);

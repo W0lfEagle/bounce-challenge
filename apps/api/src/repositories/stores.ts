@@ -6,11 +6,15 @@ export function getStore(db: Database.Database, storeId: string): Store | undefi
   if (!row) return undefined;
   const store = storeSchema.omit({ checkoutItems: true }).parse(row);
 
-  const checkoutItems = db.prepare(`
+  const checkoutItems = db
+    .prepare(
+      `
     SELECT id, name, unit_price_cents AS unitPriceCents,
       min_quantity AS minQuantity, max_quantity AS maxQuantity
     FROM checkout_items WHERE store_id = ? ORDER BY id
-  `).all(storeId);
+  `,
+    )
+    .all(storeId);
 
   return storeSchema.parse({ ...store, checkoutItems });
 }

@@ -12,20 +12,33 @@ test('returns a seeded store matching the shared contract', async () => {
     expect(response.statusCode).toBe(200);
     const store = storeSchema.parse(response.json());
     expect(store.name).toBe("Cody's Cookie Store");
-    expect(store.checkoutItems[0]).toMatchObject({ unitPriceCents: 590, minQuantity: 1, maxQuantity: 10 });
-  } finally { await app.close(); }
+    expect(store.checkoutItems[0]).toMatchObject({
+      unitPriceCents: 590,
+      minQuantity: 1,
+      maxQuantity: 10,
+    });
+  } finally {
+    await app.close();
+  }
 });
 
 test.each([
-  ['/stores/missing-store', 404, 'NOT_FOUND'],
-  ['/stores/invalid_store', 400, 'INVALID_STORE_ID'],
-])('returns a predictable error for %s', async (url, status, code) => {
+  { label: 'missing store', url: '/stores/missing-store', status: 404, code: 'NOT_FOUND' },
+  {
+    label: 'invalid identifier',
+    url: '/stores/invalid_store',
+    status: 400,
+    code: 'INVALID_STORE_ID',
+  },
+])('returns a predictable error for $label', async ({ url, status, code }) => {
   const app = buildApp({ databasePath: ':memory:' });
   try {
     const response = await app.inject(url);
     expect(response.statusCode).toBe(status);
     expect(apiErrorSchema.parse(response.json()).error.code).toBe(code);
-  } finally { await app.close(); }
+  } finally {
+    await app.close();
+  }
 });
 
 test('serves changed database prices and hides internal errors for invalid stored data', async () => {
@@ -40,16 +53,25 @@ test('serves changed database prices and hides internal errors for invalid store
     db.exec('DELETE FROM checkout_items');
     const invalid = await app.inject('/stores/codys-cookie-store');
     expect(invalid.statusCode).toBe(500);
-    expect(invalid.json()).toEqual({ error: { code: 'INTERNAL_ERROR', message: 'Something went wrong. Please try again.' } });
+    expect(invalid.json()).toEqual({
+      error: { code: 'INTERNAL_ERROR', message: 'Something went wrong. Please try again.' },
+    });
   } finally {
-    await app.close(); db.close(); rmSync(directory, { recursive: true, force: true });
+    await app.close();
+    db.close();
+    rmSync(directory, { recursive: true, force: true });
   }
 });
 
 test('allows the configured web origin through CORS', async () => {
   const app = buildApp({ databasePath: ':memory:' });
   try {
-    const response = await app.inject({ url: '/stores/codys-cookie-store', headers: { origin: 'http://localhost:8081' } });
+    const response = await app.inject({
+      url: '/stores/codys-cookie-store',
+      headers: { origin: 'http://localhost:8081' },
+    });
     expect(response.headers['access-control-allow-origin']).toBe('http://localhost:8081');
-  } finally { await app.close(); }
+  } finally {
+    await app.close();
+  }
 });

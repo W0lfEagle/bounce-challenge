@@ -1,58 +1,134 @@
-import { processPayment } from './payments';
+import { paymentTimeoutMs, processPayment } from './payments';
 
-const input = { name: 'Test User', email: 'test@example.com', amount: 1180, currency: 'USD', cardNumber: '4111111111111111' };
-const transaction = { transaction_id: 'txn_test', status: 'completed', amount: 1180, currency: 'USD', last_four_digits: '1111', payment_method: 'credit_card', timestamp: '2026-10-09T16:00:00Z', merchant_reference: 'REF_TEST', processing_fee: 25 };
+const input = {
+  name: 'Test User',
+  email: 'test@example.com',
+  amount: 1180,
+  currency: 'USD',
+  cardNumber: '4111111111111111',
+};
+const transaction = {
+  transaction_id: 'txn_test',
+  status: 'completed',
+  amount: 1180,
+  currency: 'USD',
+  last_four_digits: '1111',
+  payment_method: 'credit_card',
+  timestamp: '2026-10-09T16:00:00Z',
+  merchant_reference: 'REF_TEST',
+  processing_fee: 25,
+};
 const originalFetch = globalThis.fetch;
 const mockFetch = jest.fn();
-beforeEach(() => { globalThis.fetch = mockFetch; mockFetch.mockReset(); });
-afterAll(() => { globalThis.fetch = originalFetch; });
 
-test('sends integer cents and the documented field names and validates success', async () => {
+beforeEach(() => {
+  globalThis.fetch = mockFetch;
+  mockFetch.mockReset();
+});
+afterEach(() => {
+  jest.restoreAllMocks();
+});
+afterAll(() => {
+  globalThis.fetch = originalFetch;
+});
+
+test('sends integer cents and documented fields, then validates success', async () => {
   mockFetch.mockResolvedValue({ status: 200, json: async () => transaction });
   expect(await processPayment(input)).toEqual({ status: 'succeeded', transaction });
-  expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toEqual({ name: input.name, email: input.email, amount: 1180, currency: 'USD', card_number: input.cardNumber });
+  expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toEqual({
+    name: input.name,
+    email: input.email,
+    amount: 1180,
+    currency: 'USD',
+    card_number: input.cardNumber,
+  });
   expect(mockFetch.mock.calls[0][1].redirect).toBe('error');
 });
 
-test('recognises an explicit provider decline', async () => {
-  mockFetch.mockResolvedValue({ status: 400, json: async () => ({ error_code: 'CARD_DECLINED', detail: 'Declined.' }) });
+test('discards unexpected provider fields before returning transaction metadata', async () => {
+  mockFetch.mockResolvedValue({
+    status: 200,
+    json: async () => ({ ...transaction, card_number: input.cardNumber }),
+  });
+  const result = await processPayment(input);
+  expect(result).toEqual({ status: 'succeeded', transaction });
+  expect(JSON.stringify(result)).not.toContain(input.cardNumber);
+});
+
+test.each([
+  { label: 'top-level', body: { error_code: 'CARD_DECLINED', detail: 'Declined.' } },
+  { label: 'wrapped', body: { detail: { error_code: 'CARD_DECLINED', detail: 'Declined.' } } },
+])('recognizes a validated $label decline envelope', async ({ body }) => {
+  mockFetch.mockResolvedValue({ status: 400, json: async () => body });
   expect(await processPayment(input)).toEqual({ status: 'declined', errorCode: 'CARD_DECLINED' });
 });
 
 test.each([
-  { status: 200, body: { ...transaction, amount: 9999 } },
-  { status: 200, body: { ...transaction, last_four_digits: '1234' } },
-  { status: 200, body: { ...transaction, currency: 'EUR' } },
-  { status: 200, body: {} },
-  { status: 400, body: {} },
-  { status: 500, body: {} },
-])('treats an unverified response as unknown and never retries', async ({ status, body }) => {
+  { label: 'wrong amount', status: 200, body: { ...transaction, amount: 9999 } },
+  { label: 'wrong card', status: 200, body: { ...transaction, last_four_digits: '1234' } },
+  { label: 'wrong currency', status: 200, body: { ...transaction, currency: 'EUR' } },
+  { label: 'incomplete transaction', status: 200, body: {} },
+  { label: 'malformed decline', status: 400, body: {} },
+  { label: 'provider failure', status: 500, body: {} },
+])('keeps $label unknown without retrying', async ({ status, body }) => {
   mockFetch.mockResolvedValue({ status, json: async () => body });
-  expect(await processPayment(input)).toMatchObject({ status: 'unknown', errorCode: expect.any(String) });
+  expect(await processPayment(input)).toMatchObject({
+    status: 'unknown',
+    errorCode: expect.any(String),
+  });
   expect(mockFetch).toHaveBeenCalledTimes(1);
 });
 
-test('treats transport errors/timeouts as unknown without retrying', async () => {
+test('keeps a transport failure unknown without retrying', async () => {
   mockFetch.mockRejectedValue(new Error('Connection lost'));
-  expect(await processPayment(input)).toEqual({ status: 'unknown', errorCode: 'PROVIDER_NETWORK_ERROR' });
+  expect(await processPayment(input)).toEqual({
+    status: 'unknown',
+    errorCode: 'PROVIDER_NETWORK_ERROR',
+  });
   expect(mockFetch).toHaveBeenCalledTimes(1);
 });
 
-test('recognises the documented validation rejection as a failed attempt', async () => {
-  mockFetch.mockResolvedValue({ status: 422, json: async () => ({ detail: [{ loc: ['body', 'email'], msg: 'Invalid', type: 'value_error' }] }) });
-  expect(await processPayment(input)).toEqual({ status: 'declined', errorCode: 'PAYMENT_VALIDATION_FAILED' });
-});
+test('aborts a stalled provider request at its deadline without retrying', async () => {
+  const createTimeoutSignal = AbortSignal.timeout.bind(AbortSignal);
+  const timeout = jest
+    .spyOn(AbortSignal, 'timeout')
+    .mockImplementation(() => createTimeoutSignal(5));
+  let requestSignal: AbortSignal | undefined;
+  mockFetch.mockImplementation((_url: unknown, options: { signal: AbortSignal }) => {
+    requestSignal = options.signal;
+    return new Promise((_resolve, reject) => {
+      options.signal.addEventListener('abort', () => reject(options.signal.reason), { once: true });
+    });
+  });
 
-test('recognises a strictly validated wrapped decline instead of making it permanently unknown', async () => {
-  mockFetch.mockResolvedValue({ status: 400, json: async () => ({ detail: { error_code: 'CARD_DECLINED', detail: 'Declined.' } }) });
-  expect(await processPayment(input)).toEqual({ status: 'declined', errorCode: 'CARD_DECLINED' });
-});
-
-test('records safe diagnostic categories for timeouts and invalid JSON', async () => {
-  const timeout = new Error('Request timed out');
-  timeout.name = 'TimeoutError';
-  mockFetch.mockRejectedValueOnce(timeout);
   expect(await processPayment(input)).toEqual({ status: 'unknown', errorCode: 'PROVIDER_TIMEOUT' });
-  mockFetch.mockResolvedValueOnce({ status: 200, json: async () => { throw new SyntaxError('Not JSON'); } });
-  expect(await processPayment(input)).toEqual({ status: 'unknown', errorCode: 'INVALID_PROVIDER_RESPONSE' });
+  expect(timeout).toHaveBeenCalledWith(paymentTimeoutMs);
+  expect(requestSignal?.aborted).toBe(true);
+  expect(mockFetch).toHaveBeenCalledTimes(1);
+});
+
+test('recognizes a documented validation rejection as a failed attempt', async () => {
+  mockFetch.mockResolvedValue({
+    status: 422,
+    json: async () => ({
+      detail: [{ loc: ['body', 'email'], msg: 'Invalid', type: 'value_error' }],
+    }),
+  });
+  expect(await processPayment(input)).toEqual({
+    status: 'declined',
+    errorCode: 'PAYMENT_VALIDATION_FAILED',
+  });
+});
+
+test('records a safe diagnostic category for invalid JSON', async () => {
+  mockFetch.mockResolvedValue({
+    status: 200,
+    json: async () => {
+      throw new SyntaxError('Not JSON');
+    },
+  });
+  expect(await processPayment(input)).toEqual({
+    status: 'unknown',
+    errorCode: 'INVALID_PROVIDER_RESPONSE',
+  });
 });
