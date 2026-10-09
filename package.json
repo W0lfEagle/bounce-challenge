@@ -1,0 +1,16 @@
+{
+  "name": "bounce-challenge",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": ["apps/*"],
+  "engines": { "node": ">=24 <25" },
+  "scripts": {
+    "dev:web": "npm run web --workspace @bounce/web",
+    "dev:api": "npm run dev --workspace @bounce/api",
+    "typecheck": "npm run typecheck --workspaces",
+    "test": "npm run test --workspaces",
+    "lint": "npm run lint --workspaces --if-present",
+    "check": "npm run typecheck && npm run lint && npm test",
+    "build": "npm run build --workspaces"
+  }
+}
