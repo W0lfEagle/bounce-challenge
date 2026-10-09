@@ -23,7 +23,7 @@ test('displays the store, price, and bounds returned by the API', async () => {
   await render(<App />);
   expect(await screen.findByRole('header', { name: "Cody's Cookie Store" })).toBeTruthy();
   expect(screen.getByText('$7.25 per bag')).toBeTruthy();
-  expect(screen.getByText('Quantity: 1–6 bags')).toBeTruthy();
+  expect(screen.getByText('Choose 1–6 bags')).toBeTruthy();
 });
 
 test('allows retry after a failed request', async () => {

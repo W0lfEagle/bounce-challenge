@@ -2,7 +2,7 @@
 
 TypeScript project with an Expo/React Native frontend targeting web and a Fastify backend.
 
-The frontend loads Cody's Cookie Store and its bag price from a SQLite-backed API. Shared Zod schemas validate store data on the server and in the frontend. Booking submission and payment integration are later milestones.
+The frontend loads Cody's Cookie Store and its bag price from a SQLite-backed API. Shared Zod schemas validate store data on the server and in the frontend. Checkout includes a bounded bag counter, a live total, and plain name, email, and card-number inputs. Input validation and booking/payment submission are later milestones; the Book button is currently disabled.
 
 ## Requirements
 
@@ -124,6 +124,8 @@ This builds shared contracts first, exports the web app to `apps/web/dist`, and 
 npm workspaces provide one dependency install and lockfile without an additional build orchestrator. The Expo app uses the blank TypeScript template; routing and state-management libraries are deferred until needed.
 
 React and `test-renderer` versions are pinned through root overrides to match Expo SDK 57. This prevents npm from installing a newer peer React copy that causes hook errors and React DOM version mismatches.
+
+Frontend styles reference the static tokens in `apps/web/src/theme.ts` for colours, spacing, radii, and typography. Component-specific layout dimensions stay local. Dark mode with an animated colour transition is recorded as a future UI polish idea.
 
 ## Dependency advisory status
 

@@ -163,3 +163,45 @@ For each meaningful decision, record the requirement it addresses, the chosen ap
 - All 21 tests pass: 11 backend/database tests and 10 frontend tests.
 - Repository tests verify missing-store behaviour and isolation of store-specific prices and quantity bounds.
 - All workspace type checks, frontend linting, and API/contracts/web builds pass after the reorganisation.
+
+## 2026-10-09 — Checkout UI
+
+### Authorised scope
+
+- Add plus/minus bag controls using the store item's minimum and maximum bounds.
+- Display a live total calculated from the API-provided unit price and selected quantity, retaining integer cents for calculation.
+- Add plain name, email, and card-details text inputs with no validation logic in this milestone. Card formatting and the previously agreed input validation rules are deferred.
+- Show a Book CTA. Booking and payment submission remain outside this milestone; the button is disabled until submission is implemented, independently of input contents.
+
+### Implementation choices
+
+- Keep store loading and errors in `App.tsx`; put the loaded checkout form in a small `Checkout` component with local state. No form library or global state is needed.
+- Start quantity at the item's minimum and disable controls at either bound. Clamp control updates to preserve the bounds during repeated presses.
+- Derive the total instead of storing it as additional state, and format cents as USD only for display.
+- Keep inputs in memory without logging, transmitting, or persisting their values.
+- Use a scrollable layout so all fields and the summary remain reachable on smaller screens. Bag controls have accessible labels and disabled states.
+
+### Verification
+
+- All 24 tests pass: 11 backend/database tests and 13 frontend tests. New component tests cover quantity changes, API-provided bounds and pricing, totals, and preservation of unrestricted input text.
+- All workspace type checks, frontend linting, and the Expo web build pass.
+- Browser verification confirms the loaded checkout, labelled inputs, and a total change from $5.90 to $11.80 when increasing from one bag to two.
+
+## 2026-10-09 — Shared static theme
+
+### Confirmed
+
+- Centralise semantic colours, spacing, radii, font sizes, and font weights in `apps/web/src/theme.ts`.
+- Keep component styles in `StyleSheet.create`, referencing shared tokens instead of repeating visual values.
+- Keep layout-specific dimensions local. No theme provider, styling library, or theme switching is needed yet.
+
+### Implementation choices
+
+- Use semantic colour names such as `surface`, `text`, and `disabledBackground`.
+- Use a numeric spacing scale to preserve the current layout while giving components a common set of values.
+- Export a typed constant object with no added runtime dependency.
+
+### Future UI polish
+
+- Revisit a light/dark theme switch with a delightful animated colour transition. Consider accessibility and reduced-motion preferences when designing the animation.
+- The user asked to record this idea for a future UI polish step, rather than schedule a timed reminder.

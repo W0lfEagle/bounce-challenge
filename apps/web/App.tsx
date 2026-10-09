@@ -1,8 +1,10 @@
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { Store } from '@bounce/contracts';
 import { fetchStore } from './src/store-api';
+import { Checkout } from './src/components/Checkout';
+import { theme } from './src/theme';
 
 type StoreState =
   | { status: 'loading' }
@@ -32,7 +34,7 @@ export default function App() {
   }, [attempt]);
 
   return (
-    <View style={styles.container}>
+    <ScrollView style={styles.page} contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
       <View style={styles.card}>
         {state.status === 'loading' && (
           <View style={styles.section}>
@@ -49,40 +51,24 @@ export default function App() {
           </View>
         )}
         {state.status === 'loaded' && (
-          <View style={styles.section}>
-            <Text>Booking storage at:</Text>
-            <Text accessibilityRole="header" style={styles.heading}>{state.store.name}</Text>
-            {state.store.checkoutItems.map((item) => (
-              <View key={item.id} style={styles.item}>
-                <Text style={styles.itemName}>{item.name}</Text>
-                <Text style={styles.price}>
-                  {new Intl.NumberFormat('en-US', { style: 'currency', currency: state.store.currency }).format(item.unitPriceCents / 100)} per bag
-                </Text>
-                <Text>Quantity: {item.minQuantity}–{item.maxQuantity} bags</Text>
-              </View>
-            ))}
-          </View>
+          <Checkout store={state.store} />
         )}
       </View>
       <StatusBar style="auto" />
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
+  page: { flex: 1, backgroundColor: theme.colors.background },
   container: {
-    flex: 1,
-    backgroundColor: '#f5f6f8',
+    flexGrow: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 24,
+    padding: theme.spacing[16],
   },
-  card: { width: '100%', maxWidth: 440, padding: 24, backgroundColor: '#fff', borderRadius: 12 },
-  section: { gap: 12 },
-  heading: { fontSize: 24, fontWeight: '600' },
-  item: { gap: 8, marginTop: 12, paddingTop: 20, borderTopWidth: 1, borderTopColor: '#e5e7eb' },
-  itemName: { fontSize: 18, fontWeight: '600' },
-  price: { fontSize: 20 },
-  button: { alignSelf: 'flex-start', paddingHorizontal: 20, paddingVertical: 12, backgroundColor: '#2563eb', borderRadius: 6 },
-  buttonText: { color: '#fff', fontWeight: '600' },
+  card: { width: '100%', maxWidth: 440, padding: theme.spacing[24], backgroundColor: theme.colors.surface, borderRadius: theme.radii.md },
+  section: { gap: theme.spacing[12] },
+  button: { alignSelf: 'flex-start', paddingHorizontal: theme.spacing[20], paddingVertical: theme.spacing[12], backgroundColor: theme.colors.primary, borderRadius: theme.radii.sm },
+  buttonText: { color: theme.colors.primaryText, fontWeight: theme.fontWeights.semibold },
 });
