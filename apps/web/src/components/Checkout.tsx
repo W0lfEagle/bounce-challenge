@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import type { Store } from '@bounce/contracts';
+import { checkoutDetailsSchema, type CheckoutDetails, type Store } from '@bounce/contracts';
 import { theme } from '../theme';
+import { formatCardNumber } from '../lib/card-number';
 
 export function Checkout({ store }: { store: Store }) {
   const item = store.checkoutItems[0];
@@ -9,6 +10,15 @@ export function Checkout({ store }: { store: Store }) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [cardNumber, setCardNumber] = useState('');
+  const [touched, setTouched] = useState({ name: false, email: false, cardNumber: false });
+  const validation = checkoutDetailsSchema.safeParse({ name, email, cardNumber });
+  const errors: Partial<Record<keyof CheckoutDetails, string[]>> = validation.success
+    ? {}
+    : validation.error.flatten().fieldErrors;
+  const nameError = touched.name ? errors.name?.[0] : undefined;
+  const emailError = touched.email ? errors.email?.[0] : undefined;
+  const cardError = touched.cardNumber ? errors.cardNumber?.[0] : undefined;
+  const canBook = validation.success;
   const totalCents = quantity * item.unitPriceCents;
   const currencyFormatter = new Intl.NumberFormat('en-US', {
     style: 'currency', currency: store.currency,
@@ -54,11 +64,22 @@ export function Checkout({ store }: { store: Store }) {
         <Text style={styles.sectionTitle}>Personal details</Text>
         <View style={styles.field}>
           <Text style={styles.label}>Name</Text>
-          <TextInput accessibilityLabel="Name" value={name} onChangeText={setName} style={styles.input} />
+          <TextInput
+            accessibilityLabel="Name" value={name} onChangeText={setName}
+            onBlur={() => setTouched((current) => ({ ...current, name: true }))}
+            style={[styles.input, nameError && styles.invalidInput]}
+          />
+          {nameError && <Text accessibilityRole="alert" style={styles.error}>{nameError}</Text>}
         </View>
         <View style={styles.field}>
           <Text style={styles.label}>Email</Text>
-          <TextInput accessibilityLabel="Email" value={email} onChangeText={setEmail} autoCapitalize="none" autoCorrect={false} style={styles.input} />
+          <TextInput
+            accessibilityLabel="Email" value={email} onChangeText={setEmail}
+            onBlur={() => setTouched((current) => ({ ...current, email: true }))}
+            autoCapitalize="none" autoCorrect={false} keyboardType="email-address"
+            style={[styles.input, emailError && styles.invalidInput]}
+          />
+          {emailError && <Text accessibilityRole="alert" style={styles.error}>{emailError}</Text>}
         </View>
       </View>
 
@@ -66,7 +87,16 @@ export function Checkout({ store }: { store: Store }) {
         <Text style={styles.sectionTitle}>Payment information</Text>
         <View style={styles.field}>
           <Text style={styles.label}>Card details</Text>
-          <TextInput accessibilityLabel="Card details" value={cardNumber} onChangeText={setCardNumber} autoCapitalize="none" autoCorrect={false} style={styles.input} />
+          <TextInput
+            accessibilityLabel="Card details" value={cardNumber} onChangeText={setCardNumber}
+            onBlur={() => {
+              setCardNumber(formatCardNumber(cardNumber));
+              setTouched((current) => ({ ...current, cardNumber: true }));
+            }}
+            autoCapitalize="none" autoCorrect={false} keyboardType="number-pad"
+            style={[styles.input, cardError && styles.invalidInput]}
+          />
+          {cardError && <Text accessibilityRole="alert" style={styles.error}>{cardError}</Text>}
         </View>
       </View>
 
@@ -77,8 +107,8 @@ export function Checkout({ store }: { store: Store }) {
             {currencyFormatter.format(totalCents / 100)}
           </Text>
         </View>
-        <Pressable accessibilityRole="button" accessibilityState={{ disabled: true }} disabled style={styles.bookButton}>
-          <Text style={styles.bookButtonText}>Book</Text>
+        <Pressable accessibilityRole="button" accessibilityState={{ disabled: !canBook }} disabled={!canBook} style={[styles.bookButton, canBook && styles.enabledBookButton]}>
+          <Text style={[styles.bookButtonText, canBook && styles.enabledBookButtonText]}>Book</Text>
         </Pressable>
       </View>
     </View>
@@ -100,9 +130,13 @@ const styles = StyleSheet.create({
   hint: { color: theme.colors.textSubtle, fontSize: theme.fontSizes.hint },
   field: { gap: theme.spacing[6] },
   input: { minHeight: 44, paddingHorizontal: theme.spacing[12], paddingVertical: theme.spacing[10], borderWidth: 1, borderColor: theme.colors.inputBorder, borderRadius: theme.radii.sm, fontSize: theme.fontSizes.body, color: theme.colors.text, backgroundColor: theme.colors.surface },
+  invalidInput: { borderColor: theme.colors.error },
+  error: { color: theme.colors.error, fontSize: theme.fontSizes.label },
   summary: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: theme.spacing[16] },
   total: { gap: theme.spacing[4] },
   totalPrice: { fontSize: theme.fontSizes.emphasis, fontWeight: theme.fontWeights.semibold, color: theme.colors.text },
   bookButton: { minWidth: 104, minHeight: 44, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.colors.disabledBackground, borderRadius: theme.radii.sm },
   bookButtonText: { color: theme.colors.disabledText, fontSize: theme.fontSizes.body, fontWeight: theme.fontWeights.semibold },
+  enabledBookButton: { backgroundColor: theme.colors.primary },
+  enabledBookButtonText: { color: theme.colors.primaryText },
 });

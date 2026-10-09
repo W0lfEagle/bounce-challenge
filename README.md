@@ -2,7 +2,9 @@
 
 TypeScript project with an Expo/React Native frontend targeting web and a Fastify backend.
 
-The frontend loads Cody's Cookie Store and its bag price from a SQLite-backed API. Shared Zod schemas validate store data on the server and in the frontend. Checkout includes a bounded bag counter, a live total, and plain name, email, and card-number inputs. Input validation and booking/payment submission are later milestones; the Book button is currently disabled.
+The frontend loads Cody's Cookie Store and its bag price from a SQLite-backed API. Shared Zod schemas validate store data on the server and in the frontend. Checkout includes a bounded bag counter, a live total, and validated name, email, and card-number inputs. Book enables when the form is valid but has no submit action yet; booking/payment submission is a later milestone.
+
+Names must be non-empty after trimming, emails use Zod's standard email validation after trimming, and card numbers accept only digits/spaces with 13–19 digits after spaces are removed. No checksum or brand validation is performed. Errors appear after leaving a field and update as values change. The card display is grouped in fours on blur to avoid moving the cursor during editing. Shared validation produces trimmed names/emails and digits-only card numbers for future submission; no form data is currently transmitted or persisted.
 
 ## Requirements
 

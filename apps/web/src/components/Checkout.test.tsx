@@ -1,4 +1,4 @@
-import { render, screen, userEvent } from '@testing-library/react-native';
+import { fireEvent, render, screen, userEvent } from '@testing-library/react-native';
 import type { Store } from '@bounce/contracts';
 import { Checkout } from './Checkout';
 
@@ -40,7 +40,7 @@ test('uses API-provided bounds and price and prevents changes past either bound'
   expect(increase).toBeEnabled();
 });
 
-test('keeps all fields as plain text without validation or formatting', async () => {
+test('preserves field values when quantity changes and keeps invalid forms disabled', async () => {
   const user = userEvent.setup();
   await render(<Checkout store={store} />);
   await user.type(screen.getByLabelText('Name'), 'Test User');
@@ -52,4 +52,43 @@ test('keeps all fields as plain text without validation or formatting', async ()
   expect(screen.getByLabelText('Email')).toHaveDisplayValue('not an email');
   expect(screen.getByLabelText('Card details')).toHaveDisplayValue('plain card text');
   expect(screen.getByRole('button', { name: 'Book' })).toBeDisabled();
+});
+
+test('shows errors only after blur and clears them as values are corrected', async () => {
+  await render(<Checkout store={store} />);
+  expect(screen.queryAllByRole('alert')).toHaveLength(0);
+  await fireEvent.changeText(screen.getByLabelText('Name'), '   ');
+  await fireEvent(screen.getByLabelText('Name'), 'blur');
+  expect(screen.getByText('Enter your name.')).toBeTruthy();
+  await fireEvent.changeText(screen.getByLabelText('Name'), '王');
+  expect(screen.queryByText('Enter your name.')).toBeNull();
+
+  await fireEvent.changeText(screen.getByLabelText('Email'), 'not an email');
+  await fireEvent(screen.getByLabelText('Email'), 'blur');
+  expect(screen.getByText('Enter a valid email address.')).toBeTruthy();
+  await fireEvent.changeText(screen.getByLabelText('Email'), 'test@example.com');
+  expect(screen.queryByText('Enter a valid email address.')).toBeNull();
+});
+
+test('formats the card on blur and enables Book only while every field is valid', async () => {
+  await render(<Checkout store={store} />);
+  const book = screen.getByRole('button', { name: 'Book' });
+  expect(book).toBeDisabled();
+  await fireEvent.changeText(screen.getByLabelText('Name'), ' Test User ');
+  await fireEvent.changeText(screen.getByLabelText('Email'), ' test+booking@example.com ');
+  expect(book).toBeDisabled();
+  await fireEvent.changeText(screen.getByLabelText('Card details'), '4111111111111111');
+  await fireEvent(screen.getByLabelText('Card details'), 'blur');
+  expect(screen.getByLabelText('Card details')).toHaveDisplayValue('4111 1111 1111 1111');
+  expect(book).toBeEnabled();
+
+  await fireEvent.changeText(screen.getByLabelText('Card details'), '4111-1111-1111-1111');
+  expect(book).toBeDisabled();
+  expect(screen.getByText('Use only digits and spaces.')).toBeTruthy();
+  await fireEvent.changeText(screen.getByLabelText('Card details'), '123');
+  expect(screen.getByText('Enter a card number with 13–19 digits.')).toBeTruthy();
+  await fireEvent.changeText(screen.getByLabelText('Card details'), '4111 1111 1111 1111');
+  expect(book).toBeEnabled();
+  await fireEvent.changeText(screen.getByLabelText('Email'), '');
+  expect(book).toBeDisabled();
 });

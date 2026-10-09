@@ -14,6 +14,7 @@ export const theme = {
     primaryStrong: '#1d4ed8',
     disabledBackground: '#cbd5e1',
     disabledText: '#475569',
+    error: '#b91c1c',
   },
   spacing: {
     4: 4,

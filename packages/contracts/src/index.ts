@@ -32,3 +32,14 @@ export const apiErrorSchema = z.object({
 export type Store = z.infer<typeof storeSchema>;
 export type CheckoutItem = z.infer<typeof checkoutItemSchema>;
 export type ApiError = z.infer<typeof apiErrorSchema>;
+
+export const checkoutDetailsSchema = z.object({
+  name: z.string().trim().min(1, 'Enter your name.'),
+  email: z.string().trim().pipe(z.email('Enter a valid email address.')),
+  cardNumber: z.string()
+    .regex(/^[0-9 ]+$/, 'Use only digits and spaces.')
+    .transform((value) => value.replace(/ /g, ''))
+    .pipe(z.string().regex(/^[0-9]{13,19}$/, 'Enter a card number with 13–19 digits.')),
+});
+
+export type CheckoutDetails = z.infer<typeof checkoutDetailsSchema>;

@@ -205,3 +205,35 @@ For each meaningful decision, record the requirement it addresses, the chosen ap
 
 - Revisit a light/dark theme switch with a delightful animated colour transition. Consider accessibility and reduced-motion preferences when designing the animation.
 - The user asked to record this idea for a future UI polish step, rather than schedule a timed reminder.
+
+## 2026-10-09 — Frontend checkout validation
+
+### Confirmed
+
+- Require a non-empty trimmed name without restricting name characters.
+- Require a valid email after trimming surrounding whitespace; do not change its case.
+- Accept only digits and ordinary spaces in card details, with 13–19 digits after removing spaces. Do not require a checksum, brand detection, expiry, or CVC.
+- Format the card display into groups of four digits.
+- Enable Book when the form is valid. The user explicitly approved that the button need not perform an action yet; booking/payment calls remain pending.
+
+### Implementation choices
+
+- Add a shared Zod checkout-details schema so validation and normalisation can later be reused by the backend. This does not define the complete booking API contract yet.
+- Show inline errors only after blur, then update errors on changes to touched fields. Do not show errors on an untouched empty form.
+- Format card text on blur rather than every keystroke to preserve normal cursor behaviour during edits. Preserve invalid characters so the UI can explain them rather than silently converting invalid input into a valid number.
+- Use the theme's error colour token for field borders and error messages.
+- Keep the bag controls within API-provided bounds and continue calculating totals in cents.
+- Shared validation yields trimmed name/email and a digits-only card number for eventual submission. The current component only uses validity/errors; it does not send, log, or persist the values or imply booking success.
+
+### Verification
+
+- All 48 tests pass: 11 backend/database tests and 37 frontend tests.
+- Tests cover whitespace-only names, unrestricted name characters, email normalisation and invalid addresses, card length boundaries, invalid separators/characters, formatting, error visibility/correction, and enabling/disabling Book.
+- All workspace type checks, frontend linting, and the web build pass.
+- Browser verification with synthetic inputs confirms an inline invalid-email error, clearing the error after correction, card display as `4111 1111 1111 1111`, and Book becoming enabled.
+
+## 2026-10-09 — Frontend helper structure
+
+- Move the pure card-number formatter into `src/lib/card-number.ts` to separate reusable non-UI helpers from components.
+- Keep formatter tests alongside the helper in `src/lib/card-number.test.ts`.
+- Keep UI in `src/components`, visual tokens in `src/theme.ts`, and the current small API client in `src/store-api.ts`. Add further folders when their responsibilities require them rather than scaffolding empty layers.
