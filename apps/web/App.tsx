@@ -37,13 +37,13 @@ export default function App() {
     <ScrollView style={styles.page} contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
       <View style={styles.card}>
         {state.status === 'loading' && (
-          <View style={styles.section}>
+          <View style={[styles.section, styles.statusContent]}>
             <ActivityIndicator accessibilityLabel="Loading store" />
             <Text>Loading store…</Text>
           </View>
         )}
         {state.status === 'error' && (
-          <View style={styles.section}>
+          <View style={[styles.section, styles.statusContent]}>
             <Text accessibilityRole="alert">Unable to load store information. Please try again.</Text>
             <Pressable accessibilityRole="button" onPress={() => setAttempt((value) => value + 1)} style={styles.button}>
               <Text style={styles.buttonText}>Retry</Text>
@@ -67,7 +67,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: theme.spacing[16],
   },
-  card: { width: '100%', maxWidth: 440, padding: theme.spacing[24], backgroundColor: theme.colors.surface, borderRadius: theme.radii.md },
+  card: { width: '100%', maxWidth: 440, backgroundColor: theme.colors.surface, borderRadius: theme.radii.md },
+  statusContent: { padding: theme.spacing[24] },
   section: { gap: theme.spacing[12] },
   button: { alignSelf: 'flex-start', paddingHorizontal: theme.spacing[20], paddingVertical: theme.spacing[12], backgroundColor: theme.colors.primary, borderRadius: theme.radii.sm },
   buttonText: { color: theme.colors.primaryText, fontWeight: theme.fontWeights.semibold },

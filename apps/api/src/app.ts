@@ -5,13 +5,15 @@ import { openDatabase } from './database';
 import { registerStoreRoutes } from './routes/stores';
 import { registerHealthRoutes } from './routes/health';
 import { registerCheckoutRoutes } from './routes/checkout';
+import { processPayment, type ProcessPayment } from './payments';
 
 type AppOptions = FastifyServerOptions & {
   databasePath?: string;
   webOrigin?: string;
+  pay?: ProcessPayment;
 };
 
-export function buildApp({ databasePath, webOrigin = 'http://localhost:8081', ...options }: AppOptions = {}) {
+export function buildApp({ databasePath, webOrigin = 'http://localhost:8081', pay = processPayment, ...options }: AppOptions = {}) {
   const db = openDatabase(databasePath);
   const app = Fastify(options);
 
@@ -36,7 +38,7 @@ export function buildApp({ databasePath, webOrigin = 'http://localhost:8081', ..
 
   registerHealthRoutes(app);
   registerStoreRoutes(app, db);
-  registerCheckoutRoutes(app, db);
+  registerCheckoutRoutes(app, db, pay);
 
   return app;
 }

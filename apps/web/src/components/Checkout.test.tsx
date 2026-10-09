@@ -1,11 +1,19 @@
 import { fireEvent, render, screen, userEvent } from '@testing-library/react-native';
-import type { Store } from '@bounce/contracts';
+import type { Store, CheckoutResponse } from '@bounce/contracts';
 import { Checkout } from './Checkout';
-import { PriceChangedError, submitCheckout } from '../api/checkout';
+import { loadAttemptIds, createAttemptIds, clearAttemptIds, saveAttemptIds } from '../lib/checkout-attempt';
+import { CheckoutNotFoundError, PriceChangedError, getCheckoutStatus, submitCheckout } from '../api/checkout';
 
-jest.mock('../api/checkout', () => ({ ...jest.requireActual('../api/checkout'), submitCheckout: jest.fn() }));
+jest.mock('../api/checkout', () => ({ ...jest.requireActual('../api/checkout'), submitCheckout: jest.fn(), getCheckoutStatus: jest.fn() }));
 const mockSubmitCheckout = jest.mocked(submitCheckout);
-beforeEach(() => mockSubmitCheckout.mockReset());
+const mockGetCheckoutStatus = jest.mocked(getCheckoutStatus);
+const ids = { checkoutId: '11111111-1111-4111-8111-111111111111', attemptId: '22222222-2222-4222-8222-222222222222' };
+const success = { ...ids, status: 'succeeded' as const };
+jest.mock('../lib/checkout-attempt', () => ({
+  createAttemptIds: jest.fn((checkoutId?: string) => ({ checkoutId: checkoutId ?? '11111111-1111-4111-8111-111111111111', attemptId: '22222222-2222-4222-8222-222222222222' })),
+  loadAttemptIds: jest.fn(), saveAttemptIds: jest.fn(), clearAttemptIds: jest.fn(),
+}));
+beforeEach(() => { mockSubmitCheckout.mockReset(); mockGetCheckoutStatus.mockReset(); jest.mocked(loadAttemptIds).mockReset(); jest.mocked(createAttemptIds).mockClear(); jest.mocked(clearAttemptIds).mockClear(); jest.mocked(saveAttemptIds).mockClear(); });
 
 async function fillValidDetails() {
   await fireEvent.changeText(screen.getByLabelText('Name'), ' Test User ');
@@ -105,29 +113,31 @@ test('formats the card on blur and enables Book only while every field is valid'
 });
 
 test('shows pending feedback, prevents repeated submissions, and displays success after the response', async () => {
-  let resolveRequest!: () => void;
-  mockSubmitCheckout.mockReturnValue(new Promise<void>((resolve) => { resolveRequest = resolve; }));
+  let resolveRequest!: (result: CheckoutResponse) => void;
+  mockSubmitCheckout.mockReturnValue(new Promise<CheckoutResponse>((resolve) => { resolveRequest = resolve; }));
   const user = userEvent.setup();
   await render(<Checkout store={store} />);
   await fillValidDetails();
   await user.press(screen.getByRole('button', { name: 'Increase number of bags' }));
   await user.press(screen.getByRole('button', { name: 'Book' }));
-  expect(screen.getByLabelText('Processing payment')).toBeTruthy();
-  expect(screen.getByRole('button', { name: 'Book' })).toBeDisabled();
-  expect(screen.getByRole('button', { name: 'Increase number of bags' })).toBeDisabled();
-  expect(screen.getByLabelText('Name')).toHaveProp('editable', false);
-  expect(screen.queryByText('Payment successful')).toBeNull();
-  await user.press(screen.getByRole('button', { name: 'Book' }));
+  expect(screen.getByLabelText('Placing Booking')).toBeTruthy();
+  expect(screen.queryByRole('button', { name: 'Book' })).toBeNull();
+  expect(screen.getByRole('button', { name: 'Book', includeHiddenElements: true })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Increase number of bags', includeHiddenElements: true })).toBeDisabled();
+  expect(screen.getByLabelText('Name', { includeHiddenElements: true })).toHaveProp('editable', false);
+  expect(screen.queryByText('Booking Placed!')).toBeNull();
+  await user.press(screen.getByRole('button', { name: 'Book', includeHiddenElements: true }));
   expect(mockSubmitCheckout).toHaveBeenCalledTimes(1);
   expect(mockSubmitCheckout.mock.calls[0][0]).toEqual({
-    storeId: 'codys-cookie-store', items: [{ itemId: 'bag', quantity: 2 }], expectedTotalCents: 1180, currency: 'USD', name: 'Test User', email: 'test@example.com', cardNumber: '4111111111111111',
+    ...ids, storeId: 'codys-cookie-store', items: [{ itemId: 'bag', quantity: 2 }], expectedTotalCents: 1180, currency: 'USD', name: 'Test User', email: 'test@example.com', cardNumber: '4111111111111111',
   });
-  resolveRequest();
-  expect(await screen.findByRole('header', { name: 'Payment successful' })).toBeTruthy();
+  resolveRequest(success);
+  expect(await screen.findByRole('header', { name: 'Booking Placed!' })).toBeTruthy();
 });
 
 test('preserves the form and allows another attempt after a stub request failure', async () => {
-  mockSubmitCheckout.mockRejectedValueOnce(new Error('Offline')).mockResolvedValueOnce();
+  mockSubmitCheckout.mockRejectedValueOnce(new Error('Offline')).mockResolvedValueOnce(success);
+  mockGetCheckoutStatus.mockRejectedValueOnce(new CheckoutNotFoundError());
   const user = userEvent.setup();
   await render(<Checkout store={store} />);
   await fillValidDetails();
@@ -135,7 +145,9 @@ test('preserves the form and allows another attempt after a stub request failure
   expect(await screen.findByText('Unable to complete checkout. Please try again.')).toBeTruthy();
   expect(screen.getByLabelText('Name')).toHaveDisplayValue(' Test User ');
   await user.press(screen.getByRole('button', { name: 'Book' }));
-  expect(await screen.findByText('Payment successful')).toBeTruthy();
+  expect(await screen.findByText('Booking Placed!')).toBeTruthy();
+  expect(mockSubmitCheckout.mock.calls[1][0].attemptId).toBe(mockSubmitCheckout.mock.calls[0][0].attemptId);
+  expect(createAttemptIds).toHaveBeenCalledTimes(1);
 });
 
 test('aborts a pending checkout request on unmount', async () => {
@@ -152,7 +164,7 @@ test('aborts a pending checkout request on unmount', async () => {
 test.each([700, 500])('refreshes price to %i without automatically resubmitting', async (unitPriceCents) => {
   mockSubmitCheckout.mockRejectedValueOnce(new PriceChangedError({
     ...store, checkoutItems: [{ ...store.checkoutItems[0], unitPriceCents }],
-  })).mockResolvedValueOnce();
+  })).mockResolvedValueOnce(success);
   const user = userEvent.setup();
   await render(<Checkout store={store} />);
   await fillValidDetails();
@@ -163,6 +175,102 @@ test.each([700, 500])('refreshes price to %i without automatically resubmitting'
   expect(mockSubmitCheckout).toHaveBeenCalledTimes(1);
   expect(screen.getByLabelText('Name')).toHaveDisplayValue(' Test User ');
   await user.press(screen.getByRole('button', { name: 'Book' }));
-  expect(await screen.findByText('Payment successful')).toBeTruthy();
+  expect(await screen.findByText('Booking Placed!')).toBeTruthy();
   expect(mockSubmitCheckout.mock.calls[1][0].expectedTotalCents).toBe(unitPriceCents * 2);
+});
+
+test('shows a decline and Retry creates a new attempt for the same checkout', async () => {
+  const retryIds = { ...ids, attemptId: '33333333-3333-4333-8333-333333333333' };
+  jest.mocked(createAttemptIds).mockReturnValueOnce(ids).mockReturnValueOnce(retryIds);
+  mockSubmitCheckout.mockResolvedValueOnce({ ...ids, status: 'declined' }).mockResolvedValueOnce({ ...retryIds, status: 'succeeded' });
+  const user = userEvent.setup();
+  await render(<Checkout store={store} />);
+  await fillValidDetails();
+  await user.press(screen.getByRole('button', { name: 'Book' }));
+  expect(await screen.findByText('Your booking has failed. Please try again.')).toBeTruthy();
+  expect(screen.getByLabelText('Card details')).toHaveDisplayValue('4111 1111 1111 1111');
+  await user.press(screen.getByRole('button', { name: 'Retry' }));
+  expect(await screen.findByText('Booking Placed!')).toBeTruthy();
+  expect(mockSubmitCheckout.mock.calls[1][0].checkoutId).toBe(ids.checkoutId);
+  expect(mockSubmitCheckout.mock.calls[1][0].attemptId).toBe(retryIds.attemptId);
+});
+
+test('lets an unknown outcome be edited and explicitly reset for a fresh demo checkout', async () => {
+  const freshIds = { checkoutId: '66666666-6666-4666-8666-666666666666', attemptId: '77777777-7777-4777-8777-777777777777' };
+  jest.mocked(createAttemptIds).mockReturnValueOnce(ids).mockReturnValueOnce(freshIds);
+  mockSubmitCheckout.mockResolvedValueOnce({ ...ids, status: 'unknown' }).mockResolvedValueOnce({ ...freshIds, status: 'succeeded' });
+  const user = userEvent.setup();
+  await render(<Checkout store={store} />);
+  await fillValidDetails();
+  await user.press(screen.getByRole('button', { name: 'Book' }));
+  expect(await screen.findByText('We couldn’t confirm your booking. The previous payment may have completed. You can start over for this demo.')).toBeTruthy();
+  expect(screen.queryByRole('button', { name: 'Check payment status' })).toBeNull();
+  expect(screen.getByLabelText('Name')).toHaveProp('editable', true);
+  await fireEvent.changeText(screen.getByLabelText('Name'), 'New Demo User');
+  await user.press(screen.getByRole('button', { name: 'Start over' }));
+  expect(clearAttemptIds).toHaveBeenCalledWith(store.id);
+  expect(mockSubmitCheckout).toHaveBeenCalledTimes(1);
+  expect(mockGetCheckoutStatus).not.toHaveBeenCalled();
+  await user.press(screen.getByRole('button', { name: 'Book' }));
+  expect(await screen.findByText('Booking Placed!')).toBeTruthy();
+  expect(mockSubmitCheckout.mock.calls[1][0].checkoutId).toBe(freshIds.checkoutId);
+  expect(mockSubmitCheckout.mock.calls[1][0].name).toBe('New Demo User');
+});
+
+test('recovers success after a lost backend response without resubmitting', async () => {
+  mockSubmitCheckout.mockRejectedValue(new Error('Connection lost'));
+  mockGetCheckoutStatus.mockResolvedValue(success);
+  const user = userEvent.setup();
+  await render(<Checkout store={store} />);
+  await fillValidDetails();
+  await user.press(screen.getByRole('button', { name: 'Book' }));
+  expect(await screen.findByText('Booking Placed!')).toBeTruthy();
+  expect(mockSubmitCheckout).toHaveBeenCalledTimes(1);
+});
+
+test('recovers a saved attempt after remount without storing or resubmitting card details', async () => {
+  jest.mocked(loadAttemptIds).mockReturnValueOnce(ids);
+  mockGetCheckoutStatus.mockResolvedValue(success);
+  await render(<Checkout store={store} />);
+  expect(await screen.findByText('Booking Placed!')).toBeTruthy();
+  expect(mockGetCheckoutStatus).toHaveBeenCalledWith(ids.checkoutId, expect.any(AbortSignal));
+  expect(mockSubmitCheckout).not.toHaveBeenCalled();
+  expect(clearAttemptIds).toHaveBeenCalledWith(store.id);
+});
+
+test('clears successful recovery IDs so remount starts a fresh booking with new identifiers', async () => {
+  const newIds = { checkoutId: '44444444-4444-4444-8444-444444444444', attemptId: '55555555-5555-4555-8555-555555555555' };
+  jest.mocked(createAttemptIds).mockReturnValueOnce(ids).mockReturnValueOnce(newIds);
+  mockSubmitCheckout.mockResolvedValueOnce(success).mockResolvedValueOnce({ ...newIds, status: 'succeeded' });
+  const user = userEvent.setup();
+  const first = await render(<Checkout store={store} />);
+  await fillValidDetails();
+  await user.press(screen.getByRole('button', { name: 'Book' }));
+  expect(await screen.findByText('Booking Placed!')).toBeTruthy();
+  expect(clearAttemptIds).toHaveBeenCalledWith(store.id);
+  await first.unmount();
+
+  await render(<Checkout store={store} />);
+  expect(screen.getByLabelText('Name')).toHaveDisplayValue('');
+  expect(screen.getByLabelText('Number of bags: 1')).toBeTruthy();
+  expect(mockGetCheckoutStatus).not.toHaveBeenCalled();
+  await fillValidDetails();
+  await user.press(screen.getByRole('button', { name: 'Book' }));
+  expect(await screen.findByText('Booking Placed!')).toBeTruthy();
+  expect(mockSubmitCheckout.mock.calls[1][0].checkoutId).toBe(newIds.checkoutId);
+});
+
+test('retains saved recovery IDs when a reloaded payment remains unresolved', async () => {
+  jest.mocked(loadAttemptIds).mockReturnValue(ids);
+  mockGetCheckoutStatus.mockResolvedValue({ ...ids, status: 'unknown' });
+  const first = await render(<Checkout store={store} />);
+  expect(await screen.findByText('We couldn’t confirm your booking. The previous payment may have completed. You can start over for this demo.')).toBeTruthy();
+  expect(saveAttemptIds).toHaveBeenCalledWith(store.id, ids);
+  expect(clearAttemptIds).not.toHaveBeenCalled();
+  await first.unmount();
+  await render(<Checkout store={store} />);
+  expect(await screen.findByText('We couldn’t confirm your booking. The previous payment may have completed. You can start over for this demo.')).toBeTruthy();
+  expect(mockGetCheckoutStatus).toHaveBeenCalledTimes(2);
+  expect(mockSubmitCheckout).not.toHaveBeenCalled();
+  expect(clearAttemptIds).not.toHaveBeenCalled();
 });

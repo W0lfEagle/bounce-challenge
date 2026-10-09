@@ -24,7 +24,7 @@ export const storeSchema = z.object({
 
 export const apiErrorSchema = z.object({
   error: z.object({
-    code: z.enum(['INVALID_STORE_ID', 'INVALID_CHECKOUT', 'INVALID_REQUEST', 'PRICE_CHANGED', 'NOT_FOUND', 'INTERNAL_ERROR']),
+    code: z.enum(['INVALID_STORE_ID', 'INVALID_CHECKOUT', 'INVALID_REQUEST', 'PRICE_CHANGED', 'REQUEST_CONFLICT', 'NOT_FOUND', 'INTERNAL_ERROR']),
     message: z.string(),
   }),
 });
@@ -45,6 +45,8 @@ export const checkoutDetailsSchema = z.object({
 export type CheckoutDetails = z.infer<typeof checkoutDetailsSchema>;
 
 export const checkoutRequestSchema = checkoutDetailsSchema.extend({
+  checkoutId: z.uuid(),
+  attemptId: z.uuid(),
   storeId: storeParamsSchema.shape.storeId,
   items: z.array(z.object({
     itemId: z.literal('bag'),
@@ -59,6 +61,10 @@ export const priceChangedResponseSchema = z.object({
   store: storeSchema,
 });
 
-// Temporary demo response; no provider payment or booking is created.
-export const checkoutResponseSchema = z.object({ status: z.literal('succeeded') });
+export const checkoutResponseSchema = z.object({
+  checkoutId: z.uuid(),
+  attemptId: z.uuid(),
+  status: z.enum(['succeeded', 'declined', 'processing', 'unknown']),
+});
 export type CheckoutRequest = z.infer<typeof checkoutRequestSchema>;
+export type CheckoutResponse = z.infer<typeof checkoutResponseSchema>;

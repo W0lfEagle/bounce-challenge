@@ -1,10 +1,12 @@
-import { checkoutRequestSchema, type ApiError } from '@bounce/contracts';
+import { checkoutRequestSchema, checkoutResponseSchema, type ApiError } from '@bounce/contracts';
 import type Database from 'better-sqlite3';
 import type { FastifyInstance } from 'fastify';
-import { getStore } from '../repositories/stores';
+import { CheckoutError, checkout as processCheckout, getCheckoutStatus } from '../services/checkout';
+import type { ProcessPayment } from '../payments';
 
-export function registerCheckoutRoutes(app: FastifyInstance, db: Database.Database) {
+export function registerCheckoutRoutes(app: FastifyInstance, db: Database.Database, pay: ProcessPayment) {
   app.post('/checkout', async (request, reply) => {
+    reply.header('Cache-Control', 'no-store');
     const checkout = checkoutRequestSchema.safeParse(request.body);
     if (!checkout.success) {
       return reply.code(400).send({
@@ -12,30 +14,23 @@ export function registerCheckoutRoutes(app: FastifyInstance, db: Database.Databa
       } satisfies ApiError);
     }
 
-    const store = getStore(db, checkout.data.storeId);
-    if (!store) {
-      return reply.code(404).send({
-        error: { code: 'NOT_FOUND', message: 'Store not found.' },
-      } satisfies ApiError);
+    try {
+      const result = await processCheckout(db, checkout.data, pay);
+      return reply.code(result.status === 'processing' || result.status === 'unknown' ? 202 : 200).send(result);
+    } catch (error) {
+      if (error instanceof CheckoutError) {
+        return reply.code(error.statusCode).send({ error: { code: error.code, message: error.message }, ...(error.store && { store: error.store }) });
+      }
+      throw error;
     }
-    const selection = checkout.data.items[0];
-    const item = store.checkoutItems.find((candidate) => candidate.id === selection.itemId);
-    if (!item || selection.quantity < item.minQuantity || selection.quantity > item.maxQuantity) {
-      return reply.code(400).send({
-        error: { code: 'INVALID_CHECKOUT', message: 'Bag quantity is outside the store limits.' },
-      } satisfies ApiError);
-    }
+  });
 
-    const totalCents = item.unitPriceCents * selection.quantity;
-    if (checkout.data.expectedTotalCents !== totalCents || checkout.data.currency !== store.currency) {
-      return reply.code(409).send({
-        error: { code: 'PRICE_CHANGED', message: 'The price has changed. Review the updated total before booking.' },
-        store,
-      });
-    }
-
-    // Stub only: no database write or payment-provider call.
-    await new Promise<void>((resolve) => setTimeout(resolve, 2000));
-    return { status: 'succeeded' };
+  app.get('/checkout/:checkoutId', async (request, reply) => {
+    reply.header('Cache-Control', 'no-store');
+    const params = checkoutResponseSchema.pick({ checkoutId: true }).safeParse(request.params);
+    if (!params.success) return reply.code(400).send({ error: { code: 'INVALID_REQUEST', message: 'Invalid checkout identifier.' } } satisfies ApiError);
+    const result = getCheckoutStatus(db, params.data.checkoutId);
+    if (!result) return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Checkout not found.' } } satisfies ApiError);
+    return result;
   });
 }

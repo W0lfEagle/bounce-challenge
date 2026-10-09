@@ -15,6 +15,7 @@ export const theme = {
     disabledBackground: '#cbd5e1',
     disabledText: '#475569',
     error: '#b91c1c',
+    overlay: 'rgba(0, 0, 0, 0.5)',
   },
   spacing: {
     4: 4,
@@ -29,5 +30,5 @@ export const theme = {
   },
   radii: { sm: 6, md: 12 },
   fontSizes: { hint: 13, label: 14, body: 16, subheading: 18, emphasis: 22, heading: 24 },
-  fontWeights: { semibold: '600' },
+  fontWeights: { semibold: '600', bold: '700' },
 } as const;

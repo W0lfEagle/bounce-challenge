@@ -21,7 +21,7 @@ test('creates and seeds a fresh file database, preserving edits on restart', () 
     expect(getStore(db, 'codys-cookie-store')?.checkoutItems[0].unitPriceCents).toBe(725);
     expect(db.prepare('SELECT count(*) AS count FROM stores').get()).toEqual({ count: 1 });
     expect(db.prepare('SELECT count(*) AS count FROM checkout_items').get()).toEqual({ count: 1 });
-    expect(db.prepare('SELECT count(*) AS count FROM schema_migrations').get()).toEqual({ count: 2 });
+    expect(db.prepare('SELECT count(*) AS count FROM schema_migrations').get()).toEqual({ count: 3 });
   } finally {
     if (db.open) db.close();
     rmSync(directory, { recursive: true, force: true });

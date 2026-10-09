@@ -286,3 +286,85 @@ For each meaningful decision, record the requirement it addresses, the chosen ap
 - Tests cover item-array validation, quantity bounds, expected totals above/below current pricing, currency mismatch, rejection before the stub delay, changed database prices, and explicit resubmission with a revised total.
 - Frontend tests cover both price increases and decreases, preservation of form values, no automatic retry, and validation of conflict responses.
 - Workspace type checks, frontend linting, and contracts/API/web builds pass.
+
+## 2026-10-09 — Mock-provider payments and durable idempotency
+
+### Confirmed
+
+- Commit the completed stub/price-confirmation milestone before this integration.
+- Connect Book through our API to the documented mock payments provider, displaying booking success or the requested failure message and Retry button.
+- The user explicitly approved adding booking and payment-attempt persistence and idempotency in this milestone.
+
+### Implementation choices
+
+- Add a migration for bookings and payment attempts. Persist accepted price snapshots and customer details before contacting the provider; never persist full card numbers or card-number hashes.
+- Introduce a small checkout service for orchestration, keeping SQL in repositories and HTTP handling in routes. This is the point at which a service layer becomes useful.
+- Use frontend-generated UUIDs for checkout/attempt identity. Short immediate SQLite transactions claim attempts atomically, and a partial unique index prevents concurrent unresolved attempts for one booking. No network call runs inside a database transaction.
+- Repeated attempt IDs return stored results or processing/unknown state. Bind IDs to normalised non-card checkout details and reject conflicting reuse. A successful or unresolved checkout cannot start another payment attempt.
+- Retry after a decline uses a fresh attempt ID. Changes to checkout/customer/pricing details after decline use a new checkout ID, preserving immutable snapshots. New attempts still validate current catalogue pricing; repeated existing attempts use their accepted snapshot.
+- Validate the provider's completed transaction, amount, currency, last four digits, and other required response fields. Store transaction ID, fee, and other validated transaction metadata without passing provider error internals to the UI.
+- Use a 15-second provider deadline without automatic retries. Treat documented declines/validation rejections as failed attempts; treat transport errors, malformed responses, unexpected statuses, mismatched transaction details, and failure to save provider success as unknown.
+- Add a read-only checkout status endpoint returning only IDs and payment status, with no customer data and no cacheable responses. Stale processing attempts become unknown after 20 seconds when checked, rather than being replayed after a crash.
+- Keep only recovery IDs in browser tab session storage. Recover pending/completed state after reload; retain confirmed IDs so reloading does not accidentally start another checkout. Native restart recovery is deferred until native delivery.
+- A lost backend response triggers status recovery. Unknown results block payment retries and offer a status-check action. If no status record is found, resubmission retains the same identity so a late original request cannot race another charge.
+- Use Expo Crypto for UUID generation on web and future native targets. No new form/payment UI library is needed.
+
+### Limitations
+
+- The provider has no documented idempotency or transaction lookup/refund API. Local uniqueness cannot guarantee exactly-once charging after an uncertain provider response; unresolved attempts remain blocked without an external reconciliation mechanism.
+- The current single-store/session flow has no “book another” or reconciliation/admin screen. These are outside this milestone.
+- Storage-disabled browsers and native apps fall back to in-memory IDs; durable restart recovery is guaranteed only when browser session storage is available.
+
+### Verification
+
+- All 102 tests pass: 45 backend/database/provider tests and 57 frontend tests.
+- Tests cover provider success/decline/validation rejection, mismatched or malformed responses, transport failure, accepted-price persistence, replay after restart and catalogue changes, conflicting IDs, concurrent requests, explicit-decline retries, unknown outcomes, stale attempts, and failure to save provider success.
+- Frontend tests cover the requested failure/Retry UI, fresh attempt IDs after decline, lost-response recovery without another payment, blocked retries while unknown, status-only checks, saved-ID recovery, and storage limitations.
+- All workspace type checks, frontend linting, contracts/API/web builds, and local Expo dependency compatibility checks pass.
+- Live browser verification with synthetic data reached the supplied mock provider and persisted a confirmed booking for 590 cents plus validated transaction metadata. Reloading recovered the confirmation without another charge request. Random provider declines are covered deterministically in automated tests.
+
+## 2026-10-09 — Demo reset and mockup alignment
+
+### Confirmed
+
+- Clear browser recovery IDs and the in-memory identity after confirmed success, while keeping the success screen visible. The next reload starts an empty booking session and Book creates new identifiers.
+- Preserve recovery IDs for processing/unknown outcomes and retain the existing protection against duplicate charges. Database bookings and transaction records are not deleted.
+- Previously saved successful attempts are recovered once, clear their browser IDs, and allow a fresh checkout on the following reload.
+- This supersedes the earlier decision to retain confirmed recovery IDs indefinitely, prioritising repeatable demo testing after an acknowledged success.
+
+### Mockup alignment
+
+- Re-read the Figma mockup: booking submission covers the entire checkout with a dark overlay and centred “Placing Booking” text/loading feedback. The success frame says “Booking Placed!” in the centre.
+- Move checkout padding inside the component so the overlay covers the whole card, including its outer padding. Disable underlying controls and hide them from accessibility navigation while the overlay is present.
+- Keep “Checking payment status” wording for status recovery so a read-only check is not described as another booking submission.
+
+### Verification
+
+- All 104 tests pass: 45 backend tests and 59 frontend tests.
+- Tests verify clearing confirmed recovery IDs, a fresh form/new checkout identity after remount, preservation of unresolved recovery IDs, and inaccessible/disabled underlying controls during the loading overlay.
+- Workspace type checks, frontend linting, and the web build pass.
+- Live browser verification shows the whole-card loading overlay and centred success message, then an empty form with one bag after reload following confirmed success. Database records remain intact.
+
+## 2026-10-09 — Escape from unresolved demo checkouts
+
+### Confirmed
+
+- The user explicitly approved replacing the dead-end status button with a demo-only “Start over” action, acknowledging that a new booking could create another mock transaction.
+- Keep form fields and bag controls editable after an unknown result. Continue disabling them during active network requests.
+- Start over clears browser recovery IDs and the in-memory identity, preserves entered values, and returns to a new booking session without making a payment request.
+- Retain the old unresolved database attempt, its status, and its replay protection. Do not reclassify an uncertain outcome as a decline without evidence.
+- This supersedes the previous permanent frontend lock/status-check button for unknown outcomes. Automatic recovery after a lost response or reload remains available before the user chooses a reset.
+
+### Investigation and parser improvements
+
+- The observed unknown attempt completed in approximately 600 ms, making a provider timeout unlikely. The original response was not recorded, so the exact cause could not be established.
+- Added strict support for wrapped HTTP 400 decline envelopes alongside the documented top-level format. This is defensive compatibility, not proof that the original failure was a wrapped decline.
+- Save safe reason codes for future unknown results, including invalid provider responses, network errors, timeouts, stale attempts, and persistence failures. No raw card data or provider payload is added to diagnostics.
+- A single controlled mock-provider request returned success; failure/unknown paths are verified using deterministic tests.
+
+### Tradeoff and verification
+
+- Reset is appropriate for this mock-only demo. A production checkout would require reconciliation or provider idempotency/lookup before encouraging another purchase after an uncertain charge.
+- All 106 tests pass, along with workspace type checks, frontend linting, and all builds.
+- Tests verify that unknown forms remain editable, reset makes no provider request, and the next Book uses a fresh checkout identity. Existing unresolved records remain protected on the backend.
+- Browser verification confirmed the new Start over button, editable fields, and returning the user's stuck page to a fresh booking form without another payment request.

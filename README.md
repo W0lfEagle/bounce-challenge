@@ -2,9 +2,9 @@
 
 TypeScript project with an Expo/React Native frontend targeting web and a Fastify backend.
 
-The frontend loads Cody's Cookie Store and its bag price from a SQLite-backed API. Shared Zod schemas validate store data on the server and in the frontend. Checkout includes a bounded bag counter, a live total, and validated name, email, and card-number inputs. Book sends a validated request to a temporary checkout stub, shows a spinner while pending, and displays a simulated payment-success screen after two seconds. No real payment or booking is created.
+The frontend loads Cody's Cookie Store and its bag price from a SQLite-backed API. Shared Zod schemas validate store data on the server and in the frontend. Book submits a validated checkout to the backend, which persists a booking/payment attempt and calls the supplied mock payments API. Success shows a booking-confirmation screen; an explicit decline shows the failure message and Retry button. The provider is a simulation, so use synthetic card details.
 
-Names must be non-empty after trimming, emails use Zod's standard email validation after trimming, and card numbers accept only digits/spaces with 13–19 digits after spaces are removed. No checksum or brand validation is performed. Errors appear after leaving a field and update as values change. The card display is grouped in fours on blur to avoid moving the cursor during editing. Submission sends trimmed names/emails, a digits-only card number, the store ID, and quantity to our backend. Use synthetic card data for this stub; values are not logged or persisted, and no third-party payment call is made.
+Names must be non-empty after trimming, emails use Zod's standard email validation after trimming, and card numbers accept only digits/spaces with 13–19 digits after spaces are removed. No checksum or brand validation is performed. Errors appear after leaving a field and update as values change. The card display is grouped in fours on blur to avoid moving the cursor during editing. Full card numbers are transmitted to the mock provider through our backend but are not logged or stored. Customer name/email, accepted pricing, and validated transaction metadata are persisted.
 
 ## Requirements
 
@@ -82,13 +82,29 @@ The driver is `better-sqlite3`; queries use plain SQL and bound parameters, with
 
 Invalid store identifiers return 400; unknown stores return 404. Errors use `{ "error": { "code": "...", "message": "..." } }`. Internal failures return a generic 500 message. The frontend displays loading and retry states and does not render unvalidated response data.
 
-## Temporary checkout endpoint
+## Checkout and payments
 
-`POST /checkout` accepts JSON containing `storeId`, `items: [{ "itemId": "bag", "quantity": 2 }]`, `expectedTotalCents`, `currency`, `name`, `email`, and `cardNumber`. The array must contain exactly one bag entry for this milestone; empty arrays, duplicates, unknown items, and invalid quantities are rejected. The backend reads the current item price and quantity bounds from SQLite and computes the total in cents.
+`POST /checkout` accepts JSON containing UUID `checkoutId` and `attemptId` values, `storeId`, `items: [{ "itemId": "bag", "quantity": 2 }]`, `expectedTotalCents`, `currency`, `name`, `email`, and `cardNumber`. The array must contain exactly one bag entry; empty arrays, duplicates, unknown items, and invalid quantities are rejected. The backend reads current item prices and bounds from SQLite and computes the total in cents.
 
-If the expected total or currency differs, the API returns HTTP 409 with `PRICE_CHANGED` and the current store data, before starting the stub. The frontend validates that data, updates the price/total, preserves the form, and requires a new Book action even if the price decreased. Matching requests wait two seconds and return `{ "status": "succeeded" }`. The expected total is a comparison value, not a trusted charge amount.
+Before a new payment attempt, a price/currency mismatch returns HTTP 409 with `PRICE_CHANGED` and current store data. The frontend updates the total and requires another deliberate Book action, even if the price decreased. The expected total is a comparison value, not a trusted charge amount. A repeated attempt returns its existing result without consulting current prices or charging again.
 
-This is a practice endpoint with no booking writes, transaction IDs, payment-provider calls, or payment guarantees. The frontend locks the form while pending, prevents repeated submissions, validates the response before showing success, and clears the card number from component state on success. Failed requests preserve the form for another attempt; this is safe for the stub and must be revisited under the agreed unknown-payment rules before real payment integration.
+The API responds with `{ "checkoutId": "...", "attemptId": "...", "status": "succeeded|declined|processing|unknown" }`. Confirmed success and explicit declines return HTTP 200; processing/unknown results return 202. `GET /checkout/:checkoutId` retrieves the latest attempt without making a provider call or returning customer/card information. Status responses are not cacheable.
+
+The backend calls `https://fullstack-challenge-api.usebounce.io/v1/payments` by default. Override `PAYMENTS_API_URL` in the API process environment for a test provider. The request uses integer cents and the provider's documented `card_number` field. Success requires a valid completed transaction with matching amount, currency, and last four digits; processing fees are stored separately and do not increase the advertised charge. There is no artificial two-second delay anymore.
+
+Provider requests have a 15-second deadline. Explicit 400 declines and documented 422 validation rejections permit a deliberate new payment attempt. Transport failures, timeouts, unexpected statuses, malformed responses, and unverifiable success data produce an unknown outcome and are never automatically retried. A stale processing attempt becomes unknown after 20 seconds when its status is next checked.
+
+Bookings store immutable accepted item prices, quantities, currency, total, and customer details. Payment attempts store status and validated transaction metadata, including transaction ID, processing fee, and last four digits. Short SQLite transactions claim an attempt before contacting the provider and atomically persist success/booking confirmation afterward. Unique attempt IDs and a database constraint prevent concurrent unresolved attempts for one booking. Reusing IDs with changed non-card checkout details returns `REQUEST_CONFLICT`.
+
+The frontend covers the whole checkout with a dark “Placing Booking” overlay while submitting, matching the Figma loading state. The underlying form is locked and hidden from accessibility navigation. Confirmed success displays the centred “Booking Placed!” message and clears browser recovery IDs, so the next reload begins an empty checkout with new IDs generated on Book. Database booking and transaction records remain intact. A previously saved successful attempt is recovered once and cleared; the following reload starts fresh.
+
+An explicit decline displays “Your booking has failed. Please try again.” and Retry. An unchanged checkout reuses its checkout ID with a fresh attempt ID; edits after a decline create a new checkout. A lost backend response triggers a status lookup, not another payment. Unknown outcomes keep the form editable and replace Book with an explicit “Start over” action for this mock-only demo. Start over clears browser recovery IDs, preserves the current input values, and makes no payment request; a subsequent Book creates a new checkout identity. The old unresolved attempt remains in the database and is still protected against replay. This deliberate demo escape can create another mock transaction and is not a production reconciliation strategy.
+
+Recovery on reload still uses “Checking payment status” wording. Names, emails, and card numbers are never placed in browser storage; only recovery IDs are kept in tab session storage, with an in-memory fallback. The IDs permit status recovery and should be treated as opaque capabilities. Native restart recovery needs durable native storage before native deployment.
+
+The mock provider offers neither idempotency keys nor transaction lookup/refunds. A charge followed by a lost response or failed database write may therefore remain unknown. Local idempotency prevents replaying known attempts, but does not provide an exactly-once guarantee across that provider boundary. Unknown attempts block further charges for the same checkout and require external reconciliation; the app has no reconciliation/admin workflow in this exercise. The explicit demo reset permits a separate new checkout despite that uncertainty. Keeping the same IDs when a status lookup finds no record also prevents a late original request from racing a second charge.
+
+Provider decline parsing accepts strictly validated top-level and wrapped decline envelopes on HTTP 400. Unknown results record safe diagnostic codes in `payment_attempts.error_code` (for example `PROVIDER_TIMEOUT`, `PROVIDER_NETWORK_ERROR`, `INVALID_PROVIDER_RESPONSE`, or `PAYMENT_PERSISTENCE_FAILED`), without storing raw provider payloads or full card numbers. Older unknown records without a reason cannot be retrospectively classified as declines.
 
 ## Checks
 
@@ -128,6 +144,8 @@ This builds shared contracts first, exports the web app to `apps/web/dist`, and 
 - `apps/api`: Fastify endpoints, SQLite queries, migrations, and backend tests.
   - `src/routes`: HTTP request validation and responses; calls repository functions.
   - `src/repositories`: parameterised database queries and conversion to API data.
+  - `src/services/checkout.ts`: checkout claiming, price confirmation, and payment orchestration.
+  - `src/payments.ts`: the mock-provider client and response validation.
   - `src/app.ts`: Fastify setup, route registration, error handling, and database lifecycle.
   - `src/database.ts`: database connections and migrations; `src/server.ts`: process startup.
 - `packages/contracts`: shared Zod schemas and inferred API types. Database models remain server-only.
