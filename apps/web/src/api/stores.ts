@@ -1,9 +1,9 @@
 import { apiErrorSchema, storeSchema, type Store } from '@bounce/contracts';
 
-const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://127.0.0.1:3000';
+import { apiUrl } from './config';
 
 export async function fetchStore(storeId: string, signal?: AbortSignal): Promise<Store> {
-  const response = await fetch(`${apiUrl.replace(/\/$/, '')}/stores/${encodeURIComponent(storeId)}`, { signal });
+  const response = await fetch(`${apiUrl}/stores/${encodeURIComponent(storeId)}`, { signal });
   const body: unknown = await response.json();
 
   if (!response.ok) {

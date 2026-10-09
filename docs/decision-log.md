@@ -237,3 +237,52 @@ For each meaningful decision, record the requirement it addresses, the chosen ap
 - Move the pure card-number formatter into `src/lib/card-number.ts` to separate reusable non-UI helpers from components.
 - Keep formatter tests alongside the helper in `src/lib/card-number.test.ts`.
 - Keep UI in `src/components`, visual tokens in `src/theme.ts`, and the current small API client in `src/store-api.ts`. Add further folders when their responsibilities require them rather than scaffolding empty layers.
+
+## 2026-10-09 — Stub checkout connection
+
+### Authorised scope
+
+- Commit completed frontend validation/helper changes before starting this milestone.
+- Connect Book to our backend, show a spinner while pending, and show payment success after a two-second happy-path stub response.
+- Do not connect the third-party payments API or create real payments/bookings yet.
+
+### Implementation choices
+
+- Add `POST /checkout` with shared Zod request/response contracts. Send store ID, quantity, trimmed name/email, and a normalised digits-only card number; do not accept a frontend-calculated charge amount.
+- Reuse backend input validation and current database quantity bounds before waiting two seconds and returning simulated success. Do not log or persist submitted card details.
+- Allow POST in development CORS, including JSON preflight requests. Return a predictable 400 for malformed JSON rather than classifying it as an internal failure.
+- Put both frontend clients in `src/api` now that there is a second endpoint, sharing only the API URL configuration rather than introducing a generic request framework.
+- Disable form fields, quantity controls, and Book while pending. Use an immediate request guard to prevent another submission before React updates the button state.
+- Validate success responses, clear the card number from state on success, and render the requested payment-success screen. This screen represents simulated success only.
+- Abort the frontend request on unmount and ignore obsolete results. Cancellation does not imply cancellation of a future provider payment.
+- Preserve values after a request failure and allow a manual retry for this side-effect-free stub. Real payment integration must follow the previously agreed distinction between explicit declines and unknown outcomes.
+
+### Verification
+
+- All 64 tests pass: 20 backend/database tests and 44 frontend tests.
+- Tests cover the two-second delay, request validation and quantity bounds, malformed JSON, POST preflight, normalised submission, malformed success responses, pending/success/error UI, repeat-submit prevention, and unmount cancellation.
+- All workspace type checks, frontend linting, and contracts/API/web builds pass.
+- Browser verification with synthetic details confirms the pending spinner and disabled controls, followed by the payment-success screen after the backend response.
+
+## 2026-10-09 — Item selection and price confirmation
+
+### Confirmed
+
+- Replace the checkout request's top-level quantity with `items: [{ itemId, quantity }]`, retaining store ID and customer/card details.
+- Require exactly one bag item for the current scope. Reject empty arrays, duplicate entries, unknown items, and invalid quantities; the array does not introduce additional purchasable item types.
+- Send `expectedTotalCents` and `currency` to record the terms displayed to the user. The backend calculates its own total from current database prices and compares these values before payment processing.
+- Return HTTP 409 `PRICE_CHANGED` before starting the stub when price or currency differs. Include validated current store data so the frontend can refresh the displayed pricing.
+- Preserve form values, show the updated total, and require another deliberate Book action after a conflict, including a price decrease. Do not automatically resubmit.
+
+### Implementation choices and boundaries
+
+- Validate price-conflict responses and their store identifier before replacing frontend store data. No quote-expiry system or additional dependency is needed for this exercise.
+- The stub still creates no booking/payment records. Accepted-price snapshots and idempotency are future work when checkout persistence is introduced; this change does not provide a durable price guarantee during the stub delay.
+- When persistence is added, store accepted prices, quantities, currency, and total and reuse that snapshot for the same payment attempt rather than repricing a repeated request.
+
+### Verification
+
+- All 76 tests pass: 28 backend/database tests and 48 frontend tests.
+- Tests cover item-array validation, quantity bounds, expected totals above/below current pricing, currency mismatch, rejection before the stub delay, changed database prices, and explicit resubmission with a revised total.
+- Frontend tests cover both price increases and decreases, preservation of form values, no automatic retry, and validation of conflict responses.
+- Workspace type checks, frontend linting, and contracts/API/web builds pass.

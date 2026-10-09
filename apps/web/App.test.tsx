@@ -1,9 +1,9 @@
 import { render, screen, userEvent } from '@testing-library/react-native';
 import type { Store } from '@bounce/contracts';
 import App from './App';
-import { fetchStore } from './src/store-api';
+import { fetchStore } from './src/api/stores';
 
-jest.mock('./src/store-api', () => ({ fetchStore: jest.fn() }));
+jest.mock('./src/api/stores', () => ({ fetchStore: jest.fn() }));
 const mockFetchStore = jest.mocked(fetchStore);
 const store: Store = {
   id: 'codys-cookie-store', name: "Cody's Cookie Store", currency: 'USD',

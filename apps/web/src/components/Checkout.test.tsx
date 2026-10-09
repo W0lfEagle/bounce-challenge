@@ -1,6 +1,17 @@
 import { fireEvent, render, screen, userEvent } from '@testing-library/react-native';
 import type { Store } from '@bounce/contracts';
 import { Checkout } from './Checkout';
+import { PriceChangedError, submitCheckout } from '../api/checkout';
+
+jest.mock('../api/checkout', () => ({ ...jest.requireActual('../api/checkout'), submitCheckout: jest.fn() }));
+const mockSubmitCheckout = jest.mocked(submitCheckout);
+beforeEach(() => mockSubmitCheckout.mockReset());
+
+async function fillValidDetails() {
+  await fireEvent.changeText(screen.getByLabelText('Name'), ' Test User ');
+  await fireEvent.changeText(screen.getByLabelText('Email'), ' test@example.com ');
+  await fireEvent.changeText(screen.getByLabelText('Card details'), '4111 1111 1111 1111');
+}
 
 const store: Store = {
   id: 'codys-cookie-store', name: "Cody's Cookie Store", currency: 'USD',
@@ -91,4 +102,67 @@ test('formats the card on blur and enables Book only while every field is valid'
   expect(book).toBeEnabled();
   await fireEvent.changeText(screen.getByLabelText('Email'), '');
   expect(book).toBeDisabled();
+});
+
+test('shows pending feedback, prevents repeated submissions, and displays success after the response', async () => {
+  let resolveRequest!: () => void;
+  mockSubmitCheckout.mockReturnValue(new Promise<void>((resolve) => { resolveRequest = resolve; }));
+  const user = userEvent.setup();
+  await render(<Checkout store={store} />);
+  await fillValidDetails();
+  await user.press(screen.getByRole('button', { name: 'Increase number of bags' }));
+  await user.press(screen.getByRole('button', { name: 'Book' }));
+  expect(screen.getByLabelText('Processing payment')).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Book' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Increase number of bags' })).toBeDisabled();
+  expect(screen.getByLabelText('Name')).toHaveProp('editable', false);
+  expect(screen.queryByText('Payment successful')).toBeNull();
+  await user.press(screen.getByRole('button', { name: 'Book' }));
+  expect(mockSubmitCheckout).toHaveBeenCalledTimes(1);
+  expect(mockSubmitCheckout.mock.calls[0][0]).toEqual({
+    storeId: 'codys-cookie-store', items: [{ itemId: 'bag', quantity: 2 }], expectedTotalCents: 1180, currency: 'USD', name: 'Test User', email: 'test@example.com', cardNumber: '4111111111111111',
+  });
+  resolveRequest();
+  expect(await screen.findByRole('header', { name: 'Payment successful' })).toBeTruthy();
+});
+
+test('preserves the form and allows another attempt after a stub request failure', async () => {
+  mockSubmitCheckout.mockRejectedValueOnce(new Error('Offline')).mockResolvedValueOnce();
+  const user = userEvent.setup();
+  await render(<Checkout store={store} />);
+  await fillValidDetails();
+  await user.press(screen.getByRole('button', { name: 'Book' }));
+  expect(await screen.findByText('Unable to complete checkout. Please try again.')).toBeTruthy();
+  expect(screen.getByLabelText('Name')).toHaveDisplayValue(' Test User ');
+  await user.press(screen.getByRole('button', { name: 'Book' }));
+  expect(await screen.findByText('Payment successful')).toBeTruthy();
+});
+
+test('aborts a pending checkout request on unmount', async () => {
+  mockSubmitCheckout.mockReturnValue(new Promise(() => {}));
+  const user = userEvent.setup();
+  const view = await render(<Checkout store={store} />);
+  await fillValidDetails();
+  await user.press(screen.getByRole('button', { name: 'Book' }));
+  const signal = mockSubmitCheckout.mock.calls[0][1];
+  await view.unmount();
+  expect(signal?.aborted).toBe(true);
+});
+
+test.each([700, 500])('refreshes price to %i without automatically resubmitting', async (unitPriceCents) => {
+  mockSubmitCheckout.mockRejectedValueOnce(new PriceChangedError({
+    ...store, checkoutItems: [{ ...store.checkoutItems[0], unitPriceCents }],
+  })).mockResolvedValueOnce();
+  const user = userEvent.setup();
+  await render(<Checkout store={store} />);
+  await fillValidDetails();
+  await user.press(screen.getByRole('button', { name: 'Increase number of bags' }));
+  await user.press(screen.getByRole('button', { name: 'Book' }));
+  expect(await screen.findByText('The price has changed. Review the updated total and press Book again.')).toBeTruthy();
+  expect(screen.getByLabelText('Total')).toHaveTextContent(unitPriceCents === 700 ? '$14.00' : '$10.00');
+  expect(mockSubmitCheckout).toHaveBeenCalledTimes(1);
+  expect(screen.getByLabelText('Name')).toHaveDisplayValue(' Test User ');
+  await user.press(screen.getByRole('button', { name: 'Book' }));
+  expect(await screen.findByText('Payment successful')).toBeTruthy();
+  expect(mockSubmitCheckout.mock.calls[1][0].expectedTotalCents).toBe(unitPriceCents * 2);
 });

@@ -1,4 +1,4 @@
-import { fetchStore } from './store-api';
+import { fetchStore } from './stores';
 
 const store = {
   id: 'codys-cookie-store', name: "Cody's Cookie Store", currency: 'USD',

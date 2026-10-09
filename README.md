@@ -2,9 +2,9 @@
 
 TypeScript project with an Expo/React Native frontend targeting web and a Fastify backend.
 
-The frontend loads Cody's Cookie Store and its bag price from a SQLite-backed API. Shared Zod schemas validate store data on the server and in the frontend. Checkout includes a bounded bag counter, a live total, and validated name, email, and card-number inputs. Book enables when the form is valid but has no submit action yet; booking/payment submission is a later milestone.
+The frontend loads Cody's Cookie Store and its bag price from a SQLite-backed API. Shared Zod schemas validate store data on the server and in the frontend. Checkout includes a bounded bag counter, a live total, and validated name, email, and card-number inputs. Book sends a validated request to a temporary checkout stub, shows a spinner while pending, and displays a simulated payment-success screen after two seconds. No real payment or booking is created.
 
-Names must be non-empty after trimming, emails use Zod's standard email validation after trimming, and card numbers accept only digits/spaces with 13–19 digits after spaces are removed. No checksum or brand validation is performed. Errors appear after leaving a field and update as values change. The card display is grouped in fours on blur to avoid moving the cursor during editing. Shared validation produces trimmed names/emails and digits-only card numbers for future submission; no form data is currently transmitted or persisted.
+Names must be non-empty after trimming, emails use Zod's standard email validation after trimming, and card numbers accept only digits/spaces with 13–19 digits after spaces are removed. No checksum or brand validation is performed. Errors appear after leaving a field and update as values change. The card display is grouped in fours on blur to avoid moving the cursor during editing. Submission sends trimmed names/emails, a digits-only card number, the store ID, and quantity to our backend. Use synthetic card data for this stub; values are not logged or persisted, and no third-party payment call is made.
 
 ## Requirements
 
@@ -82,6 +82,14 @@ The driver is `better-sqlite3`; queries use plain SQL and bound parameters, with
 
 Invalid store identifiers return 400; unknown stores return 404. Errors use `{ "error": { "code": "...", "message": "..." } }`. Internal failures return a generic 500 message. The frontend displays loading and retry states and does not render unvalidated response data.
 
+## Temporary checkout endpoint
+
+`POST /checkout` accepts JSON containing `storeId`, `items: [{ "itemId": "bag", "quantity": 2 }]`, `expectedTotalCents`, `currency`, `name`, `email`, and `cardNumber`. The array must contain exactly one bag entry for this milestone; empty arrays, duplicates, unknown items, and invalid quantities are rejected. The backend reads the current item price and quantity bounds from SQLite and computes the total in cents.
+
+If the expected total or currency differs, the API returns HTTP 409 with `PRICE_CHANGED` and the current store data, before starting the stub. The frontend validates that data, updates the price/total, preserves the form, and requires a new Book action even if the price decreased. Matching requests wait two seconds and return `{ "status": "succeeded" }`. The expected total is a comparison value, not a trusted charge amount.
+
+This is a practice endpoint with no booking writes, transaction IDs, payment-provider calls, or payment guarantees. The frontend locks the form while pending, prevents repeated submissions, validates the response before showing success, and clears the card number from component state on success. Failed requests preserve the form for another attempt; this is safe for the stub and must be revisited under the agreed unknown-payment rules before real payment integration.
+
 ## Checks
 
 ```sh
@@ -115,6 +123,8 @@ This builds shared contracts first, exports the web app to `apps/web/dist`, and 
 ## Layout
 
 - `apps/web`: Expo app, retaining the option of future Android and iOS delivery. Native builds have not been verified.
+  - `src/components`: checkout UI; `src/api`: store and checkout API clients and shared API URL.
+  - `src/lib`: pure helpers such as card formatting; `src/theme.ts`: shared visual tokens.
 - `apps/api`: Fastify endpoints, SQLite queries, migrations, and backend tests.
   - `src/routes`: HTTP request validation and responses; calls repository functions.
   - `src/repositories`: parameterised database queries and conversion to API data.

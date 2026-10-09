@@ -2,7 +2,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { Store } from '@bounce/contracts';
-import { fetchStore } from './src/store-api';
+import { fetchStore } from './src/api/stores';
 import { Checkout } from './src/components/Checkout';
 import { theme } from './src/theme';
 
