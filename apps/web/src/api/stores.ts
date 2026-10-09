@@ -1,10 +1,14 @@
 import { apiErrorSchema, storeSchema, type Store } from '@bounce/contracts';
 
 import { apiUrl } from './config';
+import { fetchJson } from './fetch-json';
 
 export async function fetchStore(storeId: string, signal?: AbortSignal): Promise<Store> {
-  const response = await fetch(`${apiUrl}/stores/${encodeURIComponent(storeId)}`, { signal });
-  const body: unknown = await response.json();
+  const { response, body } = await fetchJson(
+    `${apiUrl}/stores/${encodeURIComponent(storeId)}`,
+    { signal },
+    10_000,
+  );
 
   if (!response.ok) {
     const error = apiErrorSchema.safeParse(body);
@@ -12,6 +16,7 @@ export async function fetchStore(storeId: string, signal?: AbortSignal): Promise
   }
 
   const store = storeSchema.safeParse(body);
-  if (!store.success) throw new Error('The store information could not be verified.');
+  if (!store.success || store.data.id !== storeId)
+    throw new Error('The store information could not be verified.');
   return store.data;
 }
