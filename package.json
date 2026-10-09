@@ -2,15 +2,22 @@
   "name": "bounce-challenge",
   "version": "0.1.0",
   "private": true,
-  "workspaces": ["apps/*"],
+  "workspaces": ["apps/*", "packages/*"],
   "engines": { "node": ">=24 <25" },
+  "overrides": { "react": "19.2.3", "test-renderer": "1.2.0" },
   "scripts": {
+    "postinstall": "npm run build --workspace @bounce/contracts",
+    "predev:web": "npm run build --workspace @bounce/contracts",
+    "predev:api": "npm run build --workspace @bounce/contracts",
+    "pretypecheck": "npm run build --workspace @bounce/contracts",
+    "pretest": "npm run build --workspace @bounce/contracts",
     "dev:web": "npm run web --workspace @bounce/web",
     "dev:api": "npm run dev --workspace @bounce/api",
     "typecheck": "npm run typecheck --workspaces",
-    "test": "npm run test --workspaces",
+    "test": "npm run test --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
     "check": "npm run typecheck && npm run lint && npm test",
-    "build": "npm run build --workspaces"
+    "build": "npm run build --workspace @bounce/contracts && npm run build --workspace @bounce/api && npm run build --workspace @bounce/web",
+    "db:migrate": "npm run db:migrate --workspace @bounce/api"
   }
 }

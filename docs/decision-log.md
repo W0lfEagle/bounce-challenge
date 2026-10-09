@@ -110,3 +110,56 @@ For each meaningful decision, record the requirement it addresses, the chosen ap
 ### Known limitation
 
 - The dependency audit still reports advisories in transitive Expo/React Native and Jest dependencies after compatible fixes. Forced fixes would change framework compatibility and were not applied. See the README for the affected dependency families.
+
+## 2026-10-09 — Store catalogue from SQLite
+
+### Authorised scope
+
+- Persist Cody's Cookie Store and one bag checkout item, with a 590-cent USD price.
+- Create tables through migrations and seed a fresh database.
+- Share Zod schemas/types between API and frontend and display the fetched store and price.
+- Include the previously agreed API-provided quantity bounds of 1–10.
+
+### Implementation choices and reasoning
+
+- Expose `GET /stores/:storeId`, using the stable identifier `codys-cookie-store` for the initial store. The frontend selects that store but does not own its name, price, currency, or bounds.
+- Use two tables, `stores` and `checkout_items`, linked by a foreign key. Prices and quantity bounds belong to each store's bag item, allowing another store to have different values without adding bag types or sizes.
+- Use `better-sqlite3` with parameterised SQL and no ORM. Short synchronous queries keep the implementation small; expensive queries would block the API and need reassessment at a larger scale. The native driver requires consistent Node.js versions during installation and execution.
+- Apply numbered SQL migrations on startup, recording their filenames and applying each inside a transaction. The seed is a separate versioned migration. Do not rerun seeds or overwrite existing prices on restart.
+- Add SQLite constraints for currency, integer prices, valid bounds, and store references. Validate outbound database data and inbound frontend responses with the same Zod store schema.
+- Keep shared contracts in a small npm workspace compiled to JavaScript and declaration files. Build it during install and before root development/check commands; rebuild it after schema edits.
+- Configure browser CORS for the development frontend origin. The API URL and allowed web origin can be overridden for other environments.
+- Use predictable 400/404/500 errors; return no database or validation internals in 500 responses.
+- Provide a loading state and manual retry for store fetch failures. Abort requests on unmount and ignore obsolete results.
+- Pin React and the component test renderer to Expo-compatible versions. A newer auto-installed peer React caused hook errors and a React DOM version mismatch during verification.
+
+### Scope boundary
+
+- This milestone displays the catalogue; it does not implement bag selection, booking, card inputs, or payments.
+- Only USD and a single bag item per store are currently supported, as agreed. Broader currencies or item types need a deliberate contract change.
+
+### Verification
+
+- All 19 Jest tests pass: 9 backend/database tests and 10 frontend tests.
+- Type checking for the API, frontend, and contracts package passes; frontend linting and all builds pass.
+- Tests cover fresh-file initialisation, seed repeatability and preservation of edits on restart, migration rollback, database constraints, shared response validation, 400/404/500 responses, CORS, frontend loading/retry, and request cancellation.
+- The running API returns the seeded record and the web browser renders Cody's Cookie Store, $5.90 per bag, and quantity bounds of 1–10.
+
+## 2026-10-09 — API structure
+
+### Confirmed
+
+- Separate HTTP handlers into `src/routes` and database queries into `src/repositories`, with tests beside each module.
+- Route registration functions receive Fastify and, where needed, the database connection explicitly. Repositories receive the database connection and return API data without HTTP concerns.
+- Keep connection/migration setup in `database.ts`, application composition and common error handling in `app.ts`, and process startup in `server.ts`.
+- Do not introduce a service layer, repository classes/interfaces, or a dependency-injection framework for the current read-only endpoint. Reconsider a service layer when booking and payment orchestration require it.
+
+### Rationale
+
+- Clear boundaries make request behaviour and SQL easier to find and test without adding abstraction to a small app.
+
+### Verification
+
+- All 21 tests pass: 11 backend/database tests and 10 frontend tests.
+- Repository tests verify missing-store behaviour and isolation of store-specific prices and quantity bounds.
+- All workspace type checks, frontend linting, and API/contracts/web builds pass after the reorganisation.

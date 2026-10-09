@@ -1,7 +1,7 @@
 import { buildApp } from './app';
 
 test('serves the health endpoint', async () => {
-  const app = buildApp();
+  const app = buildApp({ databasePath: ':memory:' });
 
   try {
     const response = await app.inject({ method: 'GET', url: '/health' });
