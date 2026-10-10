@@ -1,162 +1,83 @@
 # Bounce Challenge
 
-TypeScript project with an Expo/React Native frontend targeting web and a Fastify backend.
+A single-store bag booking flow: select a quantity, enter customer and synthetic card details, and book through a Fastify API and the supplied mock payment provider. SQLite saves accepted booking prices and payment results. The frontend is an Expo/React Native app targeting web.
 
-The frontend loads Cody's Cookie Store and its bag price from a SQLite-backed API. Shared Zod schemas validate store data on the server and in the frontend. Book submits a validated checkout to the backend, which persists a booking/payment attempt and calls the supplied mock payments API. Success shows a booking-confirmation screen; an explicit decline shows the failure message and Retry button. The provider is a simulation, so use synthetic card details.
+Sources: [assignment](https://you.ashbyhq.com/Bounce/assignment/5b7a5a3c-8a66-4d2a-a511-1bdabbbf3d42), [Figma flow](https://www.figma.com/design/OcHovHR2QBveB3Q0j1ogkc/Bounce-FullStack-Challenge?node-id=1-3604), [payment API documentation](https://fullstack-challenge-api.usebounce.io/v1/docs).
 
-Names must be non-empty after trimming, emails use Zod's standard email validation after trimming, and card numbers accept only digits/spaces with 13–19 digits after spaces are removed. No checksum or brand validation is performed. Errors appear after leaving a field and update as values change. The card display is grouped in fours on blur to avoid moving the cursor during editing. Full card numbers are transmitted to the mock provider through our backend but are not logged or stored. Customer name/email, accepted pricing, and validated transaction metadata are persisted.
+## Quick start
 
-## Requirements
-
-- Node.js 24 (see `.nvmrc`)
-- npm 11
-
-## Setup
-
-From the repository root:
+Prerequisites: Node.js 24 (`.nvmrc`) and npm 11. Use the same Node version for installation and execution because SQLite uses a native driver.
 
 ```sh
 npm ci
+npm run demo
 ```
 
-Installation builds the shared contracts package. Use Node.js 24 consistently: the SQLite driver includes a native binary tied to the Node.js runtime used during installation.
+Open [http://localhost:8082](http://localhost:8082). The demo starts the real frontend and backend with a local deterministic payment simulator and a fresh temporary database. It requires ports 8082 and 3002 to be free. Stop both apps with Ctrl-C; the temporary database is removed.
 
-## Development
+Use a name such as `Reviewer Example`, email `reviewer@example.com`, and one of these synthetic numbers:
 
-Run these in separate terminals from the repository root:
+| Card number | Local demo behavior |
+| --- | --- |
+| `4111 1111 1111 1111` | Success |
+| `4111 1111 1111 0002` | Explicit decline; change to the success number and press Retry |
+| `4111 1111 1111 0003` | Success after three seconds; reload while waiting to see status recovery |
+
+These behaviors belong to the local simulator. The supplied provider has its own behavior.
+
+To use the supplied provider, run these commands in separate terminals:
 
 ```sh
 npm run dev:web
-```
-
-```sh
 npm run dev:api
 ```
 
-- Web: http://localhost:8081
-- API health: http://127.0.0.1:3000/health
-- Store: http://127.0.0.1:3000/stores/codys-cookie-store
+Web: [http://localhost:8081](http://localhost:8081). API: [health](http://127.0.0.1:3000/health), [store](http://127.0.0.1:3000/stores/codys-cookie-store). The provider is a simulation; use synthetic card details.
 
-Both commands watch for app changes and build shared contracts before starting. After editing `packages/contracts`, run `npm run build --workspace @bounce/contracts` or restart development commands.
+## Reviewer reading path
 
-The API listens on loopback by default. Override `PORT` or `HOST` when needed, for example `PORT=3001 npm run dev:api`. Expo may offer another port if 8081 is occupied.
+| Requirement | Start here | Representative verification |
+| --- | --- | --- |
+| Booking flow from Figma | [checkout coordinator](apps/web/src/components/Checkout.tsx), [form](apps/web/src/components/CheckoutForm.tsx) | [component tests](apps/web/src/components/Checkout.test.tsx) |
+| Backend booking logic | [checkout service](apps/api/src/services/checkout.ts) | [HTTP checkout tests](apps/api/src/routes/checkout.test.ts) |
+| Supplied payment integration | [provider adapter](apps/api/src/payments.ts) | [provider tests](apps/api/src/payments.test.ts) |
+| Database persistence | [booking queries](apps/api/src/repositories/bookings.ts), [migrations](apps/api/migrations) | [restart/confirmation tests](apps/api/src/routes/checkout.test.ts), [migration tests](apps/api/src/database.test.ts) |
+| End-to-end behavior | [browser checks](e2e/checkout.spec.ts) | Real frontend, HTTP API, adapter and SQLite; only the external provider is simulated |
 
-The frontend defaults to `http://127.0.0.1:3000`. To override it, copy `apps/web/.env.example` to `apps/web/.env` and set `EXPO_PUBLIC_API_URL`, then restart Expo. This is a public URL, not a place for secrets. Set `WEB_ORIGIN` on the API if using a web origin other than `http://localhost:8081`. Native devices will need a reachable API URL; native deployment remains outside this milestone.
+Read the [shared contracts](packages/contracts/src/index.ts) first, then [Checkout.tsx](apps/web/src/components/Checkout.tsx) for submission, accepted terms, result handling and reset decisions, and the [attempt policy](apps/web/src/lib/checkout-attempt.ts) for retry identities. For field behavior or lifecycle detail, [CheckoutForm.tsx](apps/web/src/components/CheckoutForm.tsx) owns validation and presentation, while adjacent [recovery mechanics](apps/web/src/components/checkout-recovery.ts) handle cancellable status polling. The form stays mounted through failures and pending requests to preserve inputs. The backend service keeps claim → provider → persist visible in one place.
 
-## Database and migrations
+[Design and API details](docs/design.md) explain recovery and persistence. [Current decisions](docs/decision-log.md) record rationale and tradeoffs. [Interview walkthrough and submission](docs/reviewer-guide.md) provide a demo route and git bundle checklist.
 
-The API creates `apps/api/data/bounce.sqlite` on first startup. Set `DATABASE_PATH` to use another file. Database files are ignored by Git.
-
-Startup applies pending SQL files in `apps/api/migrations` in filename order and records successful migrations in `schema_migrations`. Each migration runs transactionally; a failure rolls it back and prevents API startup. Migrations are forward-only: add a new numbered file rather than changing a previously applied migration.
-
-You can also apply migrations without starting the server:
-
-```sh
-npm run db:migrate
-```
-
-The initial schema has `stores` and `checkout_items` tables, with foreign keys and constraints for integer pricing and valid quantity bounds. A separate seed migration inserts Cody's Cookie Store and its single bag item (590 USD cents, quantity 1–10). Applied migrations are skipped, so restarts neither duplicate the records nor reset edited prices.
-
-The driver is `better-sqlite3`; queries use plain SQL and bound parameters, without an ORM. Its synchronous calls are appropriate for this small local application; expensive queries would block the API process.
-
-## Store endpoint
-
-`GET /stores/:storeId` returns:
-
-```json
-{
-  "id": "codys-cookie-store",
-  "name": "Cody's Cookie Store",
-  "currency": "USD",
-  "checkoutItems": [
-    {
-      "id": "bag",
-      "name": "Bag",
-      "unitPriceCents": 590,
-      "minQuantity": 1,
-      "maxQuantity": 10
-    }
-  ]
-}
-```
-
-Invalid store identifiers return 400; unknown stores return 404. Errors use `{ "error": { "code": "...", "message": "..." } }`. Internal failures return a generic 500 message. The frontend displays loading and retry states and does not render unvalidated response data.
-
-## Checkout and payments
-
-`POST /checkout` accepts JSON containing UUID `checkoutId` and `attemptId` values, `storeId`, `items: [{ "itemId": "bag", "quantity": 2 }]`, `expectedTotalCents`, `currency`, `name`, `email`, and `cardNumber`. The array must contain exactly one bag entry; empty arrays, duplicates, unknown items, and invalid quantities are rejected. The backend reads current item prices and bounds from SQLite and computes the total in cents.
-
-Before a new payment attempt, a price/currency mismatch returns HTTP 409 with `PRICE_CHANGED` and current store data. The frontend updates the total and requires another deliberate Book action, even if the price decreased. The expected total is a comparison value, not a trusted charge amount. A repeated attempt returns its existing result without consulting current prices or charging again.
-
-The API responds with `{ "checkoutId": "...", "attemptId": "...", "status": "succeeded|declined|processing|unknown" }`. Confirmed success and explicit declines return HTTP 200; processing/unknown results return 202. `GET /checkout/:checkoutId` retrieves the latest attempt without making a provider call or returning customer/card information. Status responses are not cacheable.
-
-The backend calls `https://fullstack-challenge-api.usebounce.io/v1/payments` by default. Override `PAYMENTS_API_URL` in the API process environment for a test provider. The request uses integer cents and the provider's documented `card_number` field. Success requires a valid completed transaction with matching amount, currency, and last four digits; processing fees are stored separately and do not increase the advertised charge. There is no artificial two-second delay anymore.
-
-Provider requests have a 15-second deadline. Explicit 400 declines and documented 422 validation rejections permit a deliberate new payment attempt. Transport failures, timeouts, unexpected statuses, malformed responses, and unverifiable success data produce an unknown outcome and are never automatically retried. A stale processing attempt becomes unknown after 20 seconds when its status is next checked.
-
-Bookings store immutable accepted item prices, quantities, currency, total, and customer details. Payment attempts store status and validated transaction metadata, including transaction ID, processing fee, and last four digits. Short SQLite transactions claim an attempt before contacting the provider and atomically persist success/booking confirmation afterward. Unique attempt IDs and a database constraint prevent concurrent unresolved attempts for one booking. Reusing IDs with changed non-card checkout details returns `REQUEST_CONFLICT`.
-
-The frontend covers the whole checkout with a dark “Placing Booking” overlay while submitting, matching the Figma loading state. The underlying form is locked and hidden from accessibility navigation. Confirmed success displays the centred “Booking Placed!” message and clears browser recovery IDs, so the next reload begins an empty checkout with new IDs generated on Book. Database booking and transaction records remain intact. A previously saved successful attempt is recovered once and cleared; the following reload starts fresh.
-
-An explicit decline displays “Your booking has failed. Please try again.” and Retry. An unchanged checkout reuses its checkout ID with a fresh attempt ID; edits after a decline create a new checkout. A lost backend response triggers a status lookup, not another payment. Unknown outcomes keep the form editable and replace Book with an explicit “Start over” action for this mock-only demo. Start over clears browser recovery IDs, preserves the current input values, and makes no payment request; a subsequent Book creates a new checkout identity. The old unresolved attempt remains in the database and is still protected against replay. This deliberate demo escape can create another mock transaction and is not a production reconciliation strategy.
-
-Recovery on reload still uses “Checking payment status” wording. Names, emails, and card numbers are never placed in browser storage; only recovery IDs are kept in tab session storage, with an in-memory fallback. The IDs permit status recovery and should be treated as opaque capabilities. Native restart recovery needs durable native storage before native deployment.
-
-The mock provider offers neither idempotency keys nor transaction lookup/refunds. A charge followed by a lost response or failed database write may therefore remain unknown. Local idempotency prevents replaying known attempts, but does not provide an exactly-once guarantee across that provider boundary. Unknown attempts block further charges for the same checkout and require external reconciliation; the app has no reconciliation/admin workflow in this exercise. The explicit demo reset permits a separate new checkout despite that uncertainty. Keeping the same IDs when a status lookup finds no record also prevents a late original request from racing a second charge.
-
-Provider decline parsing accepts strictly validated top-level and wrapped decline envelopes on HTTP 400. Unknown results record safe diagnostic codes in `payment_attempts.error_code` (for example `PROVIDER_TIMEOUT`, `PROVIDER_NETWORK_ERROR`, `INVALID_PROVIDER_RESPONSE`, or `PAYMENT_PERSISTENCE_FAILED`), without storing raw provider payloads or full card numbers. Older unknown records without a reason cannot be retrospectively classified as declines.
-
-## Checks
+## Verify
 
 ```sh
-npm run typecheck
-npm test
-npm run lint
 npm run check
-```
-
-`check` runs type checking for all workspaces, frontend linting, and both test suites. Jest uses `jest-expo` and React Native Testing Library for the frontend, and `ts-jest` with Fastify request injection for the API. Database tests use isolated memory or temporary-file databases.
-
-Run checks for one app:
-
-```sh
-npm run typecheck --workspace @bounce/web
-npm test --workspace @bounce/web
-npm run typecheck --workspace @bounce/api
-npm test --workspace @bounce/api
-```
-
-Watch tests with `npm run test:watch --workspace @bounce/web` or `npm run test:watch --workspace @bounce/api`.
-
-## Builds
-
-```sh
 npm run build
+npm run format:check
+npx playwright install chromium
+npm run test:e2e
 ```
 
-This builds shared contracts first, exports the web app to `apps/web/dist`, and compiles the API to `apps/api/dist`. Run the compiled API with `npm start --workspace @bounce/api`. Keep `apps/api/migrations` alongside the API build; the compiled server reads these SQL files at startup.
+`check` runs workspace type checks, frontend linting and the Jest suites. Tests use isolated in-memory or temporary SQLite databases. The browser suite uses Chromium, dedicated ports 8082/3002 and a fresh database per scenario; it makes no calls to the supplied provider. It also checks the test harness's types. Browser failure traces are saved under `/tmp/bounce-playwright-results`.
 
-## Layout
+`build` compiles contracts and the API and exports the frontend to `apps/web/dist`. Run the compiled API with `npm start --workspace @bounce/api`; keep `apps/api/migrations` alongside it. `npm run format` applies the repository's formatting rules. App-specific checks and test watch commands are available in each workspace.
 
-- `apps/web`: Expo app, retaining the option of future Android and iOS delivery. Native builds have not been verified.
-  - `src/components`: checkout UI; `src/api`: store and checkout API clients and shared API URL.
-  - `src/lib`: pure helpers such as card formatting; `src/theme.ts`: shared visual tokens.
-- `apps/api`: Fastify endpoints, SQLite queries, migrations, and backend tests.
-  - `src/routes`: HTTP request validation and responses; calls repository functions.
-  - `src/repositories`: parameterised database queries and conversion to API data.
-  - `src/services/checkout.ts`: checkout claiming, price confirmation, and payment orchestration.
-  - `src/payments.ts`: the mock-provider client and response validation.
-  - `src/app.ts`: Fastify setup, route registration, error handling, and database lifecycle.
-  - `src/database.ts`: database connections and migrations; `src/server.ts`: process startup.
-- `packages/contracts`: shared Zod schemas and inferred API types. Database models remain server-only.
-- `docs/decision-log.md`: agreed decisions, reasoning, and open questions.
+## Scope and tradeoffs
 
-npm workspaces provide one dependency install and lockfile without an additional build orchestrator. The Expo app uses the blank TypeScript template; routing and state-management libraries are deferred until needed.
+- Web is the verified delivery target. Expo preserves the option of native delivery; Android/iOS builds and durable native recovery have not been verified.
+- One USD bag item is supported. The solution chooses $5.90 and quantities 1–10 for this store; the server owns those values and validates them again before payment.
+- Integer cents avoid floating-point price calculations. A changed total or quantity limit updates the form and requires another deliberate Book action.
+- Local attempt IDs prevent replaying a payment. A timeout cannot establish whether the provider charged: unknown outcomes retain their IDs. The provider exposes no documented idempotency, lookup or refund operation, so this is not an exactly-once payment guarantee.
+- Reload starts fresh after success or an explicit decline. Browser recovery remembers unfinished submissions only; Retry on the current page still keeps the declined checkout and creates a fresh attempt.
+- “Start over” is a deliberate escape after an unknown result in this mock demo. It can create a second mock transaction. A production checkout would need reconciliation before offering another purchase after uncertainty.
+- Full card numbers remain in memory and transit to the provider; they are never logged or stored. Browser recovery stores only opaque IDs. Customer details and accepted prices are saved in SQLite.
 
-React and `test-renderer` versions are pinned through root overrides to match Expo SDK 57. This prevents npm from installing a newer peer React copy that causes hook errors and React DOM version mismatches.
+## Configuration
 
-Frontend styles reference the static tokens in `apps/web/src/theme.ts` for colours, spacing, radii, and typography. Component-specific layout dimensions stay local. Dark mode with an animated colour transition is recorded as a future UI polish idea.
+The API creates `apps/api/data/bounce.sqlite` and applies numbered SQL migrations on startup. Set `DATABASE_PATH` for a different file; run `npm run db:migrate` to migrate without starting the server. Add new migrations rather than editing already-applied ones.
 
-## Dependency advisory status
+The API accepts `PORT`, `HOST`, `WEB_ORIGIN` and `PAYMENTS_API_URL`. The frontend defaults to `http://127.0.0.1:3000`; copy `apps/web/.env.example` to `apps/web/.env` to set `EXPO_PUBLIC_API_URL`, then restart Expo. This public URL is not a place for secrets. Keep the API's allowed origin aligned with the frontend URL.
 
-The initial dependency audit reports advisories in the Expo/React Native and Jest toolchains, including transitive `braces`, `node-forge`, `sprintf-js`, and `uuid` dependencies. Compatible fixes were applied; advisories remain. Forced audit fixes suggest incompatible framework changes, including an Expo downgrade, so they were not applied. Recheck with `npm audit` when updating dependencies; the install is not advisory-free.
+Shared contracts build during installation and before root development/check commands. After changing them, rebuild with `npm run build --workspace @bounce/contracts` or restart development commands.
+
+The Expo/React Native and Jest dependency trees contain transitive security advisories. Compatible fixes were applied; forced audit fixes would change framework compatibility. Recheck `npm audit` when updating dependencies.

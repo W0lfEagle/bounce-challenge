@@ -14,7 +14,9 @@ export function migrateDatabase(db: Database.Database, directory = migrationsDir
   const isApplied = db.prepare('SELECT name FROM schema_migrations WHERE name = ?');
   const recordMigration = db.prepare('INSERT INTO schema_migrations (name) VALUES (?)');
 
-  for (const name of readdirSync(directory).filter((file) => file.endsWith('.sql')).sort()) {
+  for (const name of readdirSync(directory)
+    .filter((file) => file.endsWith('.sql'))
+    .sort()) {
     db.transaction(() => {
       if (isApplied.get(name)) return;
       db.exec(readFileSync(resolve(directory, name), 'utf8'));

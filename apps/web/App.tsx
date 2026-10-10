@@ -6,10 +6,7 @@ import { fetchStore } from './src/api/stores';
 import { Checkout } from './src/components/Checkout';
 import { theme } from './src/theme';
 
-type StoreState =
-  | { status: 'loading' }
-  | { status: 'loaded'; store: Store }
-  | { status: 'error' };
+type StoreState = { status: 'loading' } | { status: 'loaded'; store: Store } | { status: 'error' };
 
 const storeId = 'codys-cookie-store';
 
@@ -34,7 +31,11 @@ export default function App() {
   }, [attempt]);
 
   return (
-    <ScrollView style={styles.page} contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+    <ScrollView
+      style={styles.page}
+      contentContainerStyle={styles.container}
+      keyboardShouldPersistTaps="handled"
+    >
       <View style={styles.card}>
         {state.status === 'loading' && (
           <View style={[styles.section, styles.statusContent]}>
@@ -44,15 +45,19 @@ export default function App() {
         )}
         {state.status === 'error' && (
           <View style={[styles.section, styles.statusContent]}>
-            <Text accessibilityRole="alert">Unable to load store information. Please try again.</Text>
-            <Pressable accessibilityRole="button" onPress={() => setAttempt((value) => value + 1)} style={styles.button}>
+            <Text accessibilityRole="alert">
+              Unable to load store information. Please try again.
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => setAttempt((value) => value + 1)}
+              style={styles.button}
+            >
               <Text style={styles.buttonText}>Retry</Text>
             </Pressable>
           </View>
         )}
-        {state.status === 'loaded' && (
-          <Checkout store={state.store} />
-        )}
+        {state.status === 'loaded' && <Checkout store={state.store} />}
       </View>
       <StatusBar style="auto" />
     </ScrollView>
@@ -65,11 +70,22 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: theme.spacing[16],
+    padding: 16,
   },
-  card: { width: '100%', maxWidth: 440, backgroundColor: theme.colors.surface, borderRadius: theme.radii.md },
-  statusContent: { padding: theme.spacing[24] },
-  section: { gap: theme.spacing[12] },
-  button: { alignSelf: 'flex-start', paddingHorizontal: theme.spacing[20], paddingVertical: theme.spacing[12], backgroundColor: theme.colors.primary, borderRadius: theme.radii.sm },
+  card: {
+    width: '100%',
+    maxWidth: 440,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radii.md,
+  },
+  statusContent: { padding: 24 },
+  section: { gap: 12 },
+  button: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.radii.sm,
+  },
   buttonText: { color: theme.colors.primaryText, fontWeight: theme.fontWeights.semibold },
 });
