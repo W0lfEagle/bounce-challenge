@@ -1,6 +1,6 @@
 # Improvement plan implementation
 
-The review of `0aec1d2` led to these focused changes. See the [README](../README.md) for setup and source links, [design](design.md) for current behavior, and [reviewer guide](reviewer-guide.md) for the interview and bundle checklist.
+The review of `0aec1d2` led to these focused changes. See the [README](../README.md) for setup and source links, [design](design.md) for current behavior, and [reviewer guide](reviewer-guide.md) for the walkthrough and bundle checklist.
 
 | Planned improvement | Implemented change | Evidence |
 | --- | --- | --- |
@@ -14,6 +14,7 @@ The review of `0aec1d2` led to these focused changes. See the [README](../README
 | Remember unfinished work only | Success and decline clear browser recovery IDs. Retry keeps its current-page identity; unresolved payments still recover on reload. Removed the global storage fallback. | Fresh-after-decline browser flow makes no status lookup or extra payment. |
 | Improve web usability | Name/email autofill, keyboard navigation/submission, and hidden pending inputs removed from the tab order. | Real browser Enter/Tab checks and a narrow-viewport inspection. |
 | Improve reviewer documentation | Short quick start and source tour, current decisions, detailed API/recovery rules, repeatable demo and delivery instructions. | Portable repository links; local demo startup/shutdown verification. |
+| Verify the provider contract and operational boundaries | Accept omitted 422 validation details, add response-matrix coverage and correlated domain logs, and document current/future architecture with diagrams. | Adapter edge cases, real Fastify/SQLite logging tests, privacy assertions and the empty-422 retry integration. |
 
 The implementation keeps TypeScript, Expo web, Fastify, SQLite, shared Zod contracts and integer cents. It adds no routing, ORM, form framework or state-machine library.
 
@@ -21,4 +22,4 @@ The implementation keeps TypeScript, Expo web, Fastify, SQLite, shared Zod contr
 
 The provider has no documented idempotency/lookup API, so a lost provider response or failed confirmation write can remain unknown. The explicit mock-only reset can create a second transaction; production would need reconciliation. Native delivery and durable native restart recovery remain outside scope. Card validation checks basic structure, not checksum or brand.
 
-These are current tradeoffs, rather than unfinished requirements of this challenge. The original review is preserved separately from the submission documentation.
+These are current scope and design tradeoffs. The implementation history records the changes made after the original review.

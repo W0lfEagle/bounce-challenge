@@ -1,8 +1,8 @@
-# Bounce Challenge
+# Bounce Booking
 
 A single-store bag booking flow: select a quantity, enter customer and synthetic card details, and book through a Fastify API and the supplied mock payment provider. SQLite saves accepted booking prices and payment results. The frontend is an Expo/React Native app targeting web.
 
-Sources: [assignment](https://you.ashbyhq.com/Bounce/assignment/5b7a5a3c-8a66-4d2a-a511-1bdabbbf3d42), [Figma flow](https://www.figma.com/design/OcHovHR2QBveB3Q0j1ogkc/Bounce-FullStack-Challenge?node-id=1-3604), [payment API documentation](https://fullstack-challenge-api.usebounce.io/v1/docs).
+Sources: [challenge brief](https://you.ashbyhq.com/Bounce/assignment/5b7a5a3c-8a66-4d2a-a511-1bdabbbf3d42), [Figma flow](https://www.figma.com/design/OcHovHR2QBveB3Q0j1ogkc/Bounce-FullStack-Challenge?node-id=1-3604), [payment API documentation](https://fullstack-challenge-api.usebounce.io/v1/docs).
 
 ## Quick start
 
@@ -46,7 +46,7 @@ Web: [http://localhost:8081](http://localhost:8081). API: [health](http://127.0.
 
 Read the [shared contracts](packages/contracts/src/index.ts) first, then [Checkout.tsx](apps/web/src/components/Checkout.tsx) for submission, accepted terms, result handling and reset decisions, and the [attempt policy](apps/web/src/lib/checkout-attempt.ts) for retry identities. For field behavior or lifecycle detail, [CheckoutForm.tsx](apps/web/src/components/CheckoutForm.tsx) owns validation and presentation, while adjacent [recovery mechanics](apps/web/src/components/checkout-recovery.ts) handle cancellable status polling. The form stays mounted through failures and pending requests to preserve inputs. The backend service keeps claim → provider → persist visible in one place.
 
-[Design and API details](docs/design.md) explain recovery and persistence. [Current decisions](docs/decision-log.md) record rationale and tradeoffs. [Interview walkthrough and submission](docs/reviewer-guide.md) provide a demo route and git bundle checklist.
+[Design and API details](docs/design.md) include payment-response coverage and sequence/state diagrams. [Architecture and application boundaries](docs/architecture.md) show current components, the universal web/iOS/Android layout and proposed wider application modules. [Operations](docs/operations.md) covers structured logs, proposed monitors and uncertain-payment triage. [Current decisions](docs/decision-log.md) record tradeoffs; the [reviewer guide](docs/reviewer-guide.md) provides a walkthrough and verification checklist.
 
 ## Verify
 
@@ -71,6 +71,7 @@ npm run test:e2e
 - Reload starts fresh after success or an explicit decline. Browser recovery remembers unfinished submissions only; Retry on the current page still keeps the declined checkout and creates a fresh attempt.
 - “Start over” is a deliberate escape after an unknown result in this mock demo. It can create a second mock transaction. A production checkout would need reconciliation before offering another purchase after uncertainty.
 - Full card numbers remain in memory and transit to the provider; they are never logged or stored. Browser recovery stores only opaque IDs. Customer details and accepted prices are saved in SQLite.
+- Checkout logs correlate provider and persisted outcomes without customer/card data. Monitoring infrastructure and provider reconciliation are described as future work.
 
 ## Configuration
 
