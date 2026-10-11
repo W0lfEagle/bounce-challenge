@@ -33,7 +33,11 @@ export function buildApp({
         error: { code: 'INVALID_REQUEST', message: 'Invalid request.' },
       } satisfies ApiError);
     }
-    request.log.error(error);
+    // Raw exception messages can contain request or provider data.
+    request.log.error(
+      { event: 'request.failed', diagnosticCode: 'INTERNAL_ERROR' },
+      'Request failed.',
+    );
     return reply.code(500).send({
       error: { code: 'INTERNAL_ERROR', message: 'Something went wrong. Please try again.' },
     } satisfies ApiError);

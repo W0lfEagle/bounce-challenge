@@ -85,6 +85,7 @@ export function markStaleAttemptUnknown(
   staleAfterMs: number,
 ) {
   if (attempt.status === 'processing' && Date.now() - attempt.created_at >= staleAfterMs) {
+    // Expiry proves uncertainty, not failure; a late provider result can still finalize it.
     db.prepare(
       `
       UPDATE payment_attempts

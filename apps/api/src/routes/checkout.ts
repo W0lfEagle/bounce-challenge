@@ -13,6 +13,7 @@ export function registerCheckoutRoutes(
   db: Database.Database,
   pay: ProcessPayment,
 ) {
+  // TODO(production): bind submission/replay and status reads to a verified user or guest session.
   app.post('/checkout', async (request, reply) => {
     reply.header('Cache-Control', 'no-store');
     const checkout = checkoutRequestSchema.safeParse(request.body);
@@ -23,7 +24,7 @@ export function registerCheckoutRoutes(
     }
 
     try {
-      const result = await processCheckout(db, checkout.data, pay);
+      const result = await processCheckout(db, checkout.data, pay, request.log);
       const statusCode = result.status === 'processing' || result.status === 'unknown' ? 202 : 200;
       return reply.code(statusCode).send(result);
     } catch (error) {
@@ -45,7 +46,7 @@ export function registerCheckoutRoutes(
         error: { code: 'INVALID_REQUEST', message: 'Invalid checkout identifier.' },
       } satisfies ApiError);
     }
-    const result = getCheckoutStatus(db, params.data.checkoutId);
+    const result = getCheckoutStatus(db, params.data.checkoutId, request.log);
     if (!result) {
       return reply.code(404).send({
         error: { code: 'NOT_FOUND', message: 'Checkout not found.' },

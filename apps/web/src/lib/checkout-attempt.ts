@@ -16,6 +16,7 @@ export class CheckoutDetailsChangedError extends Error {
 export function checkoutSignature(
   details: Omit<CheckoutRequest, 'checkoutId' | 'attemptId' | 'cardNumber'>,
 ): string {
+  // UUIDs distinguish bookings; this key only detects changed details on a retry.
   // Never include the card number, even when the caller passes a full request.
   return JSON.stringify({
     storeId: details.storeId,
@@ -55,6 +56,7 @@ export function createAttemptIds(checkoutId = randomUUID()): AttemptIds {
 }
 
 export function loadAttemptIds(storeId: string): AttemptIds | undefined {
+  // Native restart recovery needs platform storage; sessionStorage is browser-only.
   try {
     const saved = globalThis.sessionStorage?.getItem(key(storeId));
     if (saved) {

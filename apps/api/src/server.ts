@@ -1,8 +1,9 @@
 import { buildApp } from './app';
+import { loggerOptions } from './logging';
 
 async function start() {
   const app = buildApp({
-    logger: true,
+    logger: loggerOptions,
     databasePath: process.env.DATABASE_PATH,
     webOrigin: process.env.WEB_ORIGIN,
   });

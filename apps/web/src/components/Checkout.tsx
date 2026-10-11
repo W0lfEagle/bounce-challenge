@@ -174,6 +174,7 @@ export function Checkout({ store: initialStore }: { store: Store }) {
 
   function startOver() {
     if (request.current) return;
+    // TODO(production): reconcile an uncertain charge before offering a separate purchase.
     clearAttemptIds(store.id);
     identity.current = null;
     setState({ status: 'idle' });

@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 const transactionSchema = z.object({
   transaction_id: z.string().min(1),
+  // The provider documents a string; only its completed example proves success.
   status: z.literal('completed'),
   amount: z.number().int().positive(),
   currency: z.string(),
@@ -20,13 +21,16 @@ const providerDeclineSchema = z.union([
   z.object({ detail: declineSchema }).transform((body) => body.detail),
 ]);
 const validationErrorSchema = z.object({
-  detail: z.array(
-    z.object({
-      loc: z.array(z.union([z.string(), z.number()])),
-      msg: z.string(),
-      type: z.string(),
-    }),
-  ),
+  // OpenAPI does not require detail: an empty object is also a valid 422 rejection.
+  detail: z
+    .array(
+      z.object({
+        loc: z.array(z.union([z.string(), z.number().int()])),
+        msg: z.string(),
+        type: z.string(),
+      }),
+    )
+    .optional(),
 });
 
 export type PaymentInput = {
