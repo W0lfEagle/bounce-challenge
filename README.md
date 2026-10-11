@@ -48,6 +48,10 @@ Read the [shared contracts](packages/contracts/src/index.ts) first, then [Checko
 
 [Design and API details](docs/design.md) include payment-response coverage and sequence/state diagrams. [Architecture and application boundaries](docs/architecture.md) show current components, the universal web/iOS/Android layout and proposed wider application modules. [Operations](docs/operations.md) covers structured logs, proposed monitors and uncertain-payment triage. [Current decisions](docs/decision-log.md) record tradeoffs; the [reviewer guide](docs/reviewer-guide.md) provides a walkthrough and verification checklist.
 
+## Marketplace of things research
+
+This branch includes a separate exploration of shared access to physical goods: [research report](docs/bounce-shared-access-report.md) and [PDF edition](output/pdf/bounce-shared-access-report.pdf). It covers possible product models, local supply, delivery operations, economics and pilot design. These proposals are independent research rather than an implemented feature or an announced roadmap.
+
 ## Verify
 
 ```sh
