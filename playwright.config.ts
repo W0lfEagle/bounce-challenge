@@ -1,6 +1,10 @@
 import { defineConfig } from '@playwright/test';
 
-export default defineConfig({
+export default defineConfig<{ backend: 'node' | 'elixir' }>({
+  projects: [
+    { name: 'node', use: { backend: 'node' } },
+    { name: 'elixir', use: { backend: 'elixir' } },
+  ],
   testDir: './e2e',
   testMatch: '**/*.spec.ts',
   workers: 1,
@@ -17,6 +21,10 @@ export default defineConfig({
     url: 'http://localhost:8082',
     reuseExistingServer: false,
     timeout: 120000,
-    env: { CI: '1', EXPO_PUBLIC_API_URL: 'http://127.0.0.1:3002' },
+    env: {
+      CI: '1',
+      EXPO_PUBLIC_API_URL: 'http://127.0.0.1:3002',
+      EXPO_PUBLIC_ELIXIR_API_URL: 'http://127.0.0.1:3003',
+    },
   },
 });

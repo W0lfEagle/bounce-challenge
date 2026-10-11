@@ -375,7 +375,11 @@ test('recovers a saved attempt after remount without storing or resubmitting car
   mockGetCheckoutStatus.mockResolvedValue(success);
   await render(<Checkout store={store} />);
   expect(await screen.findByText('Booking Placed!')).toBeTruthy();
-  expect(mockGetCheckoutStatus).toHaveBeenCalledWith(ids.checkoutId, expect.any(AbortSignal));
+  expect(mockGetCheckoutStatus).toHaveBeenCalledWith(
+    ids.checkoutId,
+    expect.any(AbortSignal),
+    'http://127.0.0.1:3000',
+  );
   expect(mockSubmitCheckout).not.toHaveBeenCalled();
   expect(clearAttemptIds).toHaveBeenCalledWith(store.id);
 });
@@ -621,7 +625,11 @@ test('recovers an identifier conflict rather than resetting an existing payment'
   await user.press(screen.getByRole('button', { name: 'Book' }));
 
   expect(await screen.findByRole('header', { name: 'Booking Placed!' })).toBeTruthy();
-  expect(mockGetCheckoutStatus).toHaveBeenCalledWith(ids.checkoutId, expect.any(AbortSignal));
+  expect(mockGetCheckoutStatus).toHaveBeenCalledWith(
+    ids.checkoutId,
+    expect.any(AbortSignal),
+    'http://127.0.0.1:3000',
+  );
   expect(mockSubmitCheckout).toHaveBeenCalledTimes(1);
 });
 

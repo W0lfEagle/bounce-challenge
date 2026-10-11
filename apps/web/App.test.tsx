@@ -49,3 +49,18 @@ test('aborts the request when unmounted', async () => {
   await view.unmount();
   expect(signal?.aborted).toBe(true);
 });
+
+test('switches URLs and aborts the old store request', async () => {
+  mockFetchStore.mockReturnValueOnce(new Promise(() => {})).mockResolvedValueOnce(store);
+  const user = userEvent.setup();
+  await render(<App />);
+  const signal = mockFetchStore.mock.calls[0][1];
+  await user.press(screen.getByRole('radio', { name: 'Elixir' }));
+  expect(signal?.aborted).toBe(true);
+  expect(mockFetchStore).toHaveBeenLastCalledWith(
+    store.id,
+    expect.any(AbortSignal),
+    'http://127.0.0.1:3001',
+  );
+  expect(await screen.findByText('$5.90 per bag')).toBeTruthy();
+});

@@ -23,6 +23,12 @@ test('validates and returns a successful response', async () => {
   await expect(fetchStore('codys-cookie-store')).resolves.toEqual(store);
 });
 
+test('routes store requests to an explicitly selected backend', async () => {
+  mockFetch.mockResolvedValue({ ok: true, json: async () => store });
+  await fetchStore(store.id, undefined, 'http://127.0.0.1:3001');
+  expect(mockFetch.mock.calls[0][0]).toBe('http://127.0.0.1:3001/stores/codys-cookie-store');
+});
+
 test.each([
   { ...store, currency: 'EUR' },
   { ...store, checkoutItems: [{ ...store.checkoutItems[0], unitPriceCents: 5.9 }] },

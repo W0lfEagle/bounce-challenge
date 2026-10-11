@@ -1,5 +1,6 @@
 import type { CheckoutResponse } from '@bounce/contracts';
 import { getCheckoutStatus } from '../api/checkout';
+import { apiUrl } from '../api/config';
 
 const statusCheckIntervalMs = 1000;
 const recoveryTimeoutMs = 30_000;
@@ -22,6 +23,7 @@ export async function waitForCheckoutResult(
   checkoutId: string,
   signal: AbortSignal,
   onProcessing: (result: CheckoutResponse) => void,
+  baseUrl = apiUrl,
 ): Promise<CheckoutResponse> {
   const controller = new AbortController();
   const abort = () => controller.abort();
@@ -34,7 +36,7 @@ export async function waitForCheckoutResult(
     while (!controller.signal.aborted) {
       let result: CheckoutResponse;
       try {
-        result = await getCheckoutStatus(checkoutId, controller.signal);
+        result = await getCheckoutStatus(checkoutId, controller.signal, baseUrl);
       } catch (error) {
         if (controller.signal.aborted) break;
         if (!sawProcessing) throw error;

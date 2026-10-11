@@ -22,6 +22,7 @@ import {
 import { CheckoutForm } from './CheckoutForm';
 import { waitForCheckoutResult } from './checkout-recovery';
 import { styles } from './Checkout.styles';
+import { backends, type Backend } from '../api/config';
 
 export type CheckoutState =
   | { status: 'idle' }
@@ -35,11 +36,18 @@ export type CheckoutState =
   | { status: 'rejected'; message: string }
   | { status: 'termsChanged'; message: string };
 
-export function Checkout({ store: initialStore }: { store: Store }) {
+export function Checkout({
+  store: initialStore,
+  backend = backends[0],
+}: {
+  store: Store;
+  backend?: Backend;
+}) {
+  const storageId = backend.id === 'node' ? initialStore.id : `${backend.id}:${initialStore.id}`;
   const [store, setStore] = useState(initialStore);
   const item = store.checkoutItems[0];
   const [quantity, setQuantity] = useState(item.minQuantity);
-  const [savedAttempt] = useState(() => loadAttemptIds(initialStore.id));
+  const [savedAttempt] = useState(() => loadAttemptIds(storageId));
   const [state, setState] = useState<CheckoutState>({
     status: savedAttempt ? 'recovering' : 'idle',
   });
@@ -53,9 +61,9 @@ export function Checkout({ store: initialStore }: { store: Store }) {
       identity.current = { ...identity.current, ids };
       // Persist unfinished work only; a decline keeps its in-page identity for Retry.
       if (result.status === 'processing' || result.status === 'unknown') {
-        saveAttemptIds(store.id, ids);
+        saveAttemptIds(storageId, ids);
       } else {
-        clearAttemptIds(store.id);
+        clearAttemptIds(storageId);
       }
       if (result.status === 'succeeded') {
         identity.current = null;
@@ -64,13 +72,13 @@ export function Checkout({ store: initialStore }: { store: Store }) {
         setState({ status: result.status });
       }
     },
-    [store.id],
+    [storageId],
   );
 
   const recover = useCallback(
     async (checkoutId: string, signal: AbortSignal) => {
       try {
-        const result = await waitForCheckoutResult(checkoutId, signal, applyResult);
+        const result = await waitForCheckoutResult(checkoutId, signal, applyResult, backend.url);
         if (!signal.aborted) applyResult(result);
       } catch (error) {
         if (!signal.aborted) {
@@ -79,7 +87,7 @@ export function Checkout({ store: initialStore }: { store: Store }) {
         }
       }
     },
-    [applyResult],
+    [applyResult, backend.url],
   );
 
   useEffect(() => {
@@ -118,7 +126,7 @@ export function Checkout({ store: initialStore }: { store: Store }) {
     }
     const ids = selection.kind === 'reuse' ? selection.ids : createAttemptIds(selection.checkoutId);
     identity.current = { ids, signature };
-    saveAttemptIds(store.id, ids);
+    saveAttemptIds(storageId, ids);
     const controller = new AbortController();
     request.current = controller;
     setState({ status: 'pending' });
@@ -129,6 +137,7 @@ export function Checkout({ store: initialStore }: { store: Store }) {
           ...details,
         },
         controller.signal,
+        backend.url,
       );
       if (!controller.signal.aborted) {
         applyResult(result);
@@ -137,7 +146,7 @@ export function Checkout({ store: initialStore }: { store: Store }) {
     } catch (error) {
       if (!controller.signal.aborted) {
         if (error instanceof PriceChangedError || error instanceof QuantityChangedError) {
-          clearAttemptIds(store.id);
+          clearAttemptIds(storageId);
           identity.current = null;
           setStore(error.store);
           const updatedItem = error.store.checkoutItems[0];
@@ -158,7 +167,7 @@ export function Checkout({ store: initialStore }: { store: Store }) {
           ['INVALID_CHECKOUT', 'INVALID_REQUEST', 'NOT_FOUND'].includes(error.code)
         ) {
           // These validated errors are returned before an attempt is claimed.
-          clearAttemptIds(store.id);
+          clearAttemptIds(storageId);
           identity.current = null;
           setState({ status: 'rejected', message: error.message });
         } else {
@@ -175,7 +184,7 @@ export function Checkout({ store: initialStore }: { store: Store }) {
   function startOver() {
     if (request.current) return;
     // TODO(production): reconcile an uncertain charge before offering a separate purchase.
-    clearAttemptIds(store.id);
+    clearAttemptIds(storageId);
     identity.current = null;
     setState({ status: 'idle' });
   }

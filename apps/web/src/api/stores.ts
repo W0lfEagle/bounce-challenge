@@ -3,9 +3,13 @@ import { apiErrorSchema, storeSchema, type Store } from '@bounce/contracts';
 import { apiUrl } from './config';
 import { fetchJson } from './fetch-json';
 
-export async function fetchStore(storeId: string, signal?: AbortSignal): Promise<Store> {
+export async function fetchStore(
+  storeId: string,
+  signal?: AbortSignal,
+  baseUrl = apiUrl,
+): Promise<Store> {
   const { response, body } = await fetchJson(
-    `${apiUrl}/stores/${encodeURIComponent(storeId)}`,
+    `${baseUrl}/stores/${encodeURIComponent(storeId)}`,
     { signal },
     10_000,
   );

@@ -3,8 +3,19 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from './fixtures';
 
-async function enterDetails(page: Page, cardNumber = '4111111111111111') {
+test.beforeEach(async ({ page, backend }) => {
+  await page.addInitScript((id) => sessionStorage.setItem('bounce:backend', id), backend);
+});
+
+async function enterDetails(
+  page: Page,
+  cardNumber = '4111111111111111',
+  backend: 'node' | 'elixir' = 'node',
+) {
   await page.goto('/');
+  await page
+    .getByRole('radio', { name: backend === 'node' ? 'Node.js' : 'Elixir', exact: true })
+    .click();
   await page.getByLabel('Name', { exact: true }).fill('Reviewer Example');
   await page.getByLabel('Email', { exact: true }).fill('reviewer@example.com');
   await page.getByLabel('Card details', { exact: true }).fill(cardNumber);
@@ -15,7 +26,7 @@ test('books through the HTTP API and persists accepted pricing and transaction m
   checkout,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await enterDetails(page);
+  await enterDetails(page, '4111111111111111', checkout.backend);
   await page.getByRole('button', { name: 'Increase number of bags' }).click();
   await expect(page.getByLabel('Total', { exact: true })).toHaveText('$11.80');
   await page.screenshot({ path: join(tmpdir(), 'bounce-review-form.png'), fullPage: true });
@@ -37,7 +48,13 @@ test('books through the HTTP API and persists accepted pricing and transaction m
     processing_fee: 25,
   });
   expect(
-    await page.evaluate(() => sessionStorage.getItem('bounce:checkout:codys-cookie-store')),
+    await page.evaluate(
+      (id) =>
+        sessionStorage.getItem(
+          `bounce:checkout:${id === 'node' ? '' : 'elixir:'}codys-cookie-store`,
+        ),
+      checkout.backend,
+    ),
   ).toBeNull();
   await page.reload();
   await expect(page.getByLabel('Name', { exact: true })).toHaveValue('');
@@ -56,7 +73,7 @@ test('retries a decline in the same checkout even when browser storage is unavai
       },
     });
   });
-  await enterDetails(page, '4111111111110002');
+  await enterDetails(page, '4111111111110002', checkout.backend);
   await page.getByRole('button', { name: 'Book', exact: true }).click();
   await expect(page.getByText('Your booking has failed. Please try again.')).toBeVisible();
   await expect(page.getByLabel('Name', { exact: true })).toHaveValue('Reviewer Example');
@@ -76,11 +93,17 @@ test('starts a fresh form after reloading a declined booking without fetching it
   page,
   checkout,
 }) => {
-  await enterDetails(page, '4111111111110002');
+  await enterDetails(page, '4111111111110002', checkout.backend);
   await page.getByRole('button', { name: 'Book', exact: true }).click();
   await expect(page.getByText('Your booking has failed. Please try again.')).toBeVisible();
   expect(
-    await page.evaluate(() => sessionStorage.getItem('bounce:checkout:codys-cookie-store')),
+    await page.evaluate(
+      (id) =>
+        sessionStorage.getItem(
+          `bounce:checkout:${id === 'node' ? '' : 'elixir:'}codys-cookie-store`,
+        ),
+      checkout.backend,
+    ),
   ).toBeNull();
 
   const statusReads: string[] = [];
@@ -106,7 +129,7 @@ test('recovers a payment after reload while it is processing without another pro
   page,
   checkout,
 }) => {
-  await enterDetails(page, '4111111111110003');
+  await enterDetails(page, '4111111111110003', checkout.backend);
   await page.getByRole('button', { name: 'Book', exact: true }).click();
   await expect.poll(() => checkout.provider.calls.length).toBe(1);
   await page.reload();

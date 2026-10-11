@@ -42,9 +42,10 @@ export class CheckoutRejectedError extends Error {
 export async function submitCheckout(
   checkout: CheckoutRequest,
   signal?: AbortSignal,
+  baseUrl = apiUrl,
 ): Promise<CheckoutResponse> {
   const { response, body } = await fetchJson(
-    `${apiUrl}/checkout`,
+    `${baseUrl}/checkout`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -90,9 +91,10 @@ export async function submitCheckout(
 export async function getCheckoutStatus(
   checkoutId: string,
   signal?: AbortSignal,
+  baseUrl = apiUrl,
 ): Promise<CheckoutResponse> {
   const { response, body } = await fetchJson(
-    `${apiUrl}/checkout/${encodeURIComponent(checkoutId)}`,
+    `${baseUrl}/checkout/${encodeURIComponent(checkoutId)}`,
     { method: 'GET', signal },
     25_000,
   );

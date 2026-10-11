@@ -1,19 +1,22 @@
 # Bounce Booking
 
-A single-store bag booking flow: select a quantity, enter customer and synthetic card details, and book through a Fastify API and the supplied mock payment provider. SQLite saves accepted booking prices and payment results. The frontend is an Expo/React Native app targeting web.
+A single-store bag booking flow: select a quantity, enter customer and synthetic card details, and book through either a Node/Fastify or Elixir/Plug API. Both use SQLite and the supplied mock payment provider. The frontend is an Expo/React Native app targeting web, with a backend demo picker.
+
+Learn from the working port: [Porting our Node backend to Elixir](docs/node-to-elixir.md), [Elixir syntax reference](docs/elixir-syntax-reference.md), and [Elixir API setup](apps/api-elixir/README.md). The tutorial links corresponding source files and explains syntax, pattern matching, processes, supervision, persistence, and tradeoffs.
 
 Sources: [challenge brief](https://you.ashbyhq.com/Bounce/assignment/5b7a5a3c-8a66-4d2a-a511-1bdabbbf3d42), [Figma flow](https://www.figma.com/design/OcHovHR2QBveB3Q0j1ogkc/Bounce-FullStack-Challenge?node-id=1-3604), [payment API documentation](https://fullstack-challenge-api.usebounce.io/v1/docs).
 
 ## Quick start
 
-Prerequisites: Node.js 24 (`.nvmrc`) and npm 11. Use the same Node version for installation and execution because SQLite uses a native driver.
+Prerequisites: Node.js 24 (`.nvmrc`), npm 11, and Elixir 1.18+ with compatible Erlang/OTP ([installation guide](https://elixir-lang.org/install.html); verified with Elixir 1.20.4 / OTP 29). Use the same Node version for installation and execution because SQLite uses a native driver.
 
 ```sh
 npm ci
+npm run setup:elixir
 npm run demo
 ```
 
-Open [http://localhost:8082](http://localhost:8082). The demo starts the real frontend and backend with a local deterministic payment simulator and a fresh temporary database. It requires ports 8082 and 3002 to be free. Stop both apps with Ctrl-C; the temporary database is removed.
+Open [http://localhost:8082](http://localhost:8082) and choose Node.js or Elixir above the checkout. The demo starts the real frontend, both APIs, and a local deterministic payment simulator with separate temporary databases. It requires ports 8082, 3002 (Node), and 3003 (Elixir) to be free. Stop with Ctrl-C; the temporary databases are removed. Switching resets the form; returning to a backend recovers its pending booking. Reload remembers the selection.
 
 Use a name such as `Reviewer Example`, email `reviewer@example.com`, and one of these synthetic numbers:
 
@@ -30,9 +33,10 @@ To use the supplied provider, run these commands in separate terminals:
 ```sh
 npm run dev:web
 npm run dev:api
+npm run dev:elixir
 ```
 
-Web: [http://localhost:8081](http://localhost:8081). API: [health](http://127.0.0.1:3000/health), [store](http://127.0.0.1:3000/stores/codys-cookie-store). The provider is a simulation; use synthetic card details.
+Web: [http://localhost:8081](http://localhost:8081). Node API: [health](http://127.0.0.1:3000/health), [store](http://127.0.0.1:3000/stores/codys-cookie-store). Elixir API: [health](http://127.0.0.1:3001/health), [store](http://127.0.0.1:3001/stores/codys-cookie-store). The provider is a simulation; use synthetic card details. Node-only development remains available without an Elixir runtime.
 
 ## Reviewer reading path
 
@@ -52,13 +56,14 @@ Read the [shared contracts](packages/contracts/src/index.ts) first, then [Checko
 
 ```sh
 npm run check
+npm run check:elixir
 npm run build
 npm run format:check
 npx playwright install chromium
 npm run test:e2e
 ```
 
-`check` runs workspace type checks, frontend linting and the Jest suites. Tests use isolated in-memory or temporary SQLite databases. The browser suite uses Chromium, dedicated ports 8082/3002 and a fresh database per scenario; it makes no calls to the supplied provider. It also checks the test harness's types. Browser failure traces are saved under `/tmp/bounce-playwright-results`.
+`check` runs workspace type checks, frontend linting and the Jest suites. `check:elixir` checks formatting, compiles with warnings treated as errors, and runs ExUnit. Tests use isolated in-memory or temporary SQLite databases. The browser suite runs the same scenarios against both backends using Chromium, ports 8082/3002/3003 and fresh databases per scenario; it makes no calls to the supplied provider. It also checks switching during pending payments and the test harness's types. Browser failure traces are saved under `/tmp/bounce-playwright-results`.
 
 `build` compiles contracts and the API and exports the frontend to `apps/web/dist`. Run the compiled API with `npm start --workspace @bounce/api`; keep `apps/api/migrations` alongside it. `npm run format` applies the repository's formatting rules. App-specific checks and test watch commands are available in each workspace.
 
@@ -75,9 +80,9 @@ npm run test:e2e
 
 ## Configuration
 
-The API creates `apps/api/data/bounce.sqlite` and applies numbered SQL migrations on startup. Set `DATABASE_PATH` for a different file; run `npm run db:migrate` to migrate without starting the server. Add new migrations rather than editing already-applied ones.
+Node creates `apps/api/data/bounce.sqlite`; Elixir creates `apps/api-elixir/data/bounce.sqlite`. Both apply numbered SQL migrations on startup. Set `DATABASE_PATH` for a different file; each backend must use its own database because request fingerprints have different internal encodings. Run `npm run db:migrate` to migrate Node without starting the server. Add new migrations rather than editing already-applied ones, and keep Elixir's packaged `priv/migrations` copies synchronized.
 
-The API accepts `PORT`, `HOST`, `WEB_ORIGIN` and `PAYMENTS_API_URL`. The frontend defaults to `http://127.0.0.1:3000`; copy `apps/web/.env.example` to `apps/web/.env` to set `EXPO_PUBLIC_API_URL`, then restart Expo. This public URL is not a place for secrets. Keep the API's allowed origin aligned with the frontend URL.
+Both APIs accept `PORT`, `HOST`, `WEB_ORIGIN` and `PAYMENTS_API_URL`. Node defaults to port 3000 and Elixir to 3001. The frontend defaults to `http://127.0.0.1:3000` and `http://127.0.0.1:3001`; copy `apps/web/.env.example` to `apps/web/.env` to set `EXPO_PUBLIC_API_URL` and `EXPO_PUBLIC_ELIXIR_API_URL`, then restart Expo. These public URLs are not a place for secrets. Keep each API's allowed origin aligned with the frontend URL.
 
 Shared contracts build during installation and before root development/check commands. After changing them, rebuild with `npm run build --workspace @bounce/contracts` or restart development commands.
 
